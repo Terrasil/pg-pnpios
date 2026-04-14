@@ -1,6 +1,5 @@
 package pl.pg.pnpios.services;
 
-import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import pl.pg.pnpios.dto.AuthorDetailsDTO;
 import pl.pg.pnpios.dto.AuthorSearchResponseDTO;

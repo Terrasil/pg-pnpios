@@ -4,9 +4,9 @@ class SettingsScreen extends StatelessWidget {
   final String selectedLanguage;
   final double textScale;
   final bool highContrast;
-  final void Function(String value) onLanguageChanged;
-  final void Function(double value) onTextScaleChanged;
-  final void Function(bool value) onHighContrastChanged;
+  final ValueChanged<String> onLanguageChanged;
+  final ValueChanged<double> onTextScaleChanged;
+  final ValueChanged<bool> onHighContrastChanged;
 
   const SettingsScreen({
     super.key,
@@ -20,40 +20,48 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        DropdownButtonFormField<String>(
-          value: selectedLanguage,
-          decoration: const InputDecoration(
-            labelText: 'Język',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'pl', child: Text('Polski')),
-            DropdownMenuItem(value: 'en', child: Text('English')),
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            Text('Ustawienia aplikacji', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              value: selectedLanguage,
+              decoration: const InputDecoration(
+                labelText: 'Language',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'pl', child: Text('Polski')),
+                DropdownMenuItem(value: 'en', child: Text('English')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onLanguageChanged(value);
+                }
+              },
+            ),
+            const SizedBox(height: 28),
+            Text('TEXT SIZE', style: Theme.of(context).textTheme.labelLarge),
+            Slider(
+              min: 0.8,
+              max: 1.6,
+              divisions: 8,
+              value: textScale,
+              label: textScale.toStringAsFixed(1),
+              onChanged: onTextScaleChanged,
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              value: highContrast,
+              title: const Text('HIGH CONTRAST'),
+              onChanged: onHighContrastChanged,
+            ),
           ],
-          onChanged: (value) {
-            if (value != null) {
-              onLanguageChanged(value);
-            }
-          },
         ),
-        const SizedBox(height: 24),
-        Text('Rozmiar tekstu: ${textScale.toStringAsFixed(1)}'),
-        Slider(
-          min: 0.8,
-          max: 1.6,
-          value: textScale,
-          onChanged: onTextScaleChanged,
-        ),
-        const SizedBox(height: 16),
-        SwitchListTile(
-          value: highContrast,
-          title: const Text('Wysoki kontrast'),
-          onChanged: onHighContrastChanged,
-        ),
-      ],
+      ),
     );
   }
 }
