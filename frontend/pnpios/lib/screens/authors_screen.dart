@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
 import '../models/app_models.dart';
 import '../services/api_service.dart';
 import '../widgets/skeletons.dart';
@@ -65,6 +66,7 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.strings;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -72,7 +74,7 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Wyszukiwanie autora',
+              strings.authorsSearchTitle,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 16),
@@ -81,10 +83,10 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: 'Imię lub nazwisko autora',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: strings.authorsSearchHint,
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
                     ),
                     onSubmitted: (_) => _search(),
                   ),
@@ -98,22 +100,24 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.tune),
-                  label: const Text('Szukaj'),
+                      : const Icon(Icons.search),
+                  label: Text(strings.searchButton),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             if (_loading) const LinearProgressIndicator(),
             const SizedBox(height: 8),
-            Expanded(child: _buildBody()),
+            Expanded(child: _buildBody(context)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
+    final strings = context.strings;
+
     if (_loading) {
       return ListView.separated(
         itemCount: 6,
@@ -127,18 +131,18 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
     }
 
     if (!_hasSearched) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.person_search_outlined,
-        title: 'Brak wyników startowych',
-        message: 'Wpisz dane autora i rozpocznij wyszukiwanie.',
+        title: strings.noInitialResultsTitle,
+        message: strings.noInitialAuthorsMessage,
       );
     }
 
     if (_items.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.search_off,
-        title: 'Brak wyników',
-        message: 'Backend zwrócił pustą listę autorów dla tego zapytania.',
+        title: strings.noResultsTitle,
+        message: strings.noAuthorsResultsMessage,
       );
     }
 
@@ -172,9 +176,11 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                       children: [
                         Text(item.name, style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text('Ur. ${item.birthYear?.toString() ?? '-'}  Zm. ${item.deathYear?.toString() ?? '-'}'),
+                        Text(strings.birthDateValue(item.birthYear?.toString() ?? '-')),
                         const SizedBox(height: 4),
-                        Text('Liczba książek: ${item.booksCount}'),
+                        Text(strings.deathDateValue(item.deathYear?.toString() ?? '-')),
+                        const SizedBox(height: 4),
+                        Text(strings.booksCount(item.booksCount)),
                       ],
                     ),
                   ),

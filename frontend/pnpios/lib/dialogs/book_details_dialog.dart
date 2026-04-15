@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../localization/app_strings.dart';
 import '../models/app_models.dart';
 import '../services/api_service.dart';
 import '../widgets/skeletons.dart';
@@ -61,6 +63,34 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
     }
   }
 
+  Future<void> _copyOfferUrl(String url) async {
+    final strings = context.strings;
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(strings.offerUrlCopied)),
+    );
+  }
+
+  Future<void> _openOfferUrl(String url) async {
+    final strings = context.strings;
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.invalidOfferUrl)),
+      );
+      return;
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.failedOpenUrl)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -76,6 +106,8 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final strings = context.strings;
+
     if (_loading) {
       return const SingleChildScrollView(child: SkeletonDialogContent());
     }
@@ -86,10 +118,10 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
 
     final details = _details;
     if (details == null) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.info_outline,
-        title: 'Brak danych',
-        message: 'Backend nie zwrócił szczegółów książki.',
+        title: strings.noDataTitle,
+        message: strings.noBookDetailsMessage,
       );
     }
 
@@ -119,57 +151,62 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
                     Text(details.subtitle!),
                   ],
                   const SizedBox(height: 8),
-                  Text('Autor: ${details.authors.isEmpty ? '-' : details.authors.map((e) => e.name).join(', ')}'),
-                  Text('Język: ${details.language ?? '-'}'),
-                  Text('Wydawca: ${details.publisher ?? '-'}'),
-                  Text('Rok: ${details.publishedYear?.toString() ?? '-'}'),
+                  Text(strings.authorLabel(details.authors.isEmpty ? '-' : details.authors.map((e) => e.name).join(', '))),
+                  Text(strings.languageValue(strings.valueOrDash(details.language))),
+                  Text(strings.publisherValue(strings.valueOrDash(details.publisher))),
+                  Text(strings.yearValue(details.publishedYear?.toString() ?? '-')),
                 ],
               ),
             ),
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
+              tooltip: strings.closeButton,
               icon: const Icon(Icons.close),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        Text(details.description?.trim().isNotEmpty == true ? details.description! : 'Brak opisu książki.'),
+        Text(details.description?.trim().isNotEmpty == true ? details.description! : strings.missingBookDescription),
         const SizedBox(height: 16),
-        Text('Oferty', style: Theme.of(context).textTheme.titleLarge),
+        Text(strings.offersTitle, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
         Expanded(
           child: details.offers.isEmpty
-              ? const EmptyState(
+              ? EmptyState(
                   icon: Icons.shopping_bag_outlined,
-                  title: 'Brak ofert',
-                  message: 'Backend nie zwrócił żadnych ofert dla tej książki.',
+                  title: strings.noOffersTitle,
+                  message: strings.noOffersMessage,
                 )
               : ListView.separated(
                   itemCount: details.offers.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final offer = details.offers[index];
+                    final priceOriginal = '${offer.originalPrice.amount.toStringAsFixed(2)} ${offer.originalPrice.currency}';
+                    final priceConverted = '${offer.convertedPrice.amount.toStringAsFixed(2)} ${offer.convertedPrice.currency}';
                     return Card(
                       child: ListTile(
                         title: Text(offer.source),
                         subtitle: Text(
-                          'Cena oryginalna: ${offer.originalPrice.amount.toStringAsFixed(2)} ${offer.originalPrice.currency}\n'
-                          'Cena po przeliczeniu: ${offer.convertedPrice.amount.toStringAsFixed(2)} ${offer.convertedPrice.currency}\n'
-                          'Dostępność: ${offer.availability}',
+                          '${strings.originalPriceValue(priceOriginal)}\n'
+                          '${strings.convertedPriceValue(priceConverted)}\n'
+                          '${strings.availabilityValue(offer.availability)}',
                         ),
                         isThreeLine: true,
-                        trailing: IconButton(
-                          tooltip: 'Kopiuj URL oferty',
-                          onPressed: offer.offerUrl.isEmpty
-                              ? null
-                              : () async {
-                                  await Clipboard.setData(ClipboardData(text: offer.offerUrl));
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Skopiowano URL oferty')),
-                                  );
-                                },
-                          icon: const Icon(Icons.open_in_new),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: strings.copyOfferUrlTooltip,
+                              onPressed: offer.offerUrl.isEmpty ? null : () => _copyOfferUrl(offer.offerUrl),
+                              icon: const Icon(Icons.copy_outlined),
+                            ),
+                            IconButton(
+                              tooltip: strings.openOfferTooltip,
+                              onPressed: offer.offerUrl.isEmpty ? null : () => _openOfferUrl(offer.offerUrl),
+                              icon: const Icon(Icons.open_in_new),
+                            ),
+                          ],
                         ),
                       ),
                     );

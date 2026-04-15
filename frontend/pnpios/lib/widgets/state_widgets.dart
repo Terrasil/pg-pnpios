@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
+
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -48,6 +50,7 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.strings;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -57,7 +60,7 @@ class ErrorState extends StatelessWidget {
             const Icon(Icons.error_outline, size: 52, color: Colors.redAccent),
             const SizedBox(height: 12),
             Text(
-              'Nie udało się pobrać danych',
+              strings.loadErrorTitle,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
@@ -66,7 +69,7 @@ class ErrorState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Spróbuj ponownie'),
+              label: Text(strings.retryButton),
             )
           ],
         ),

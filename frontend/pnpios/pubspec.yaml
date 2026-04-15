@@ -9,7 +9,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   http: ^1.2.2
+  shared_preferences: ^2.5.5
+  url_launcher: ^6.3.2
+
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/i18n/pl.json
+    - assets/i18n/en.json

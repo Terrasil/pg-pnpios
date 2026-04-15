@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
 import '../models/app_models.dart';
 import '../services/api_service.dart';
 import '../widgets/skeletons.dart';
@@ -38,6 +39,14 @@ class _BooksScreenState extends State<BooksScreen> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant BooksScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currency != widget.currency && _hasSearched && !_loading) {
+      _search();
+    }
+  }
+
   Future<void> _search() async {
     setState(() {
       _loading = true;
@@ -70,6 +79,7 @@ class _BooksScreenState extends State<BooksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.strings;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -77,7 +87,7 @@ class _BooksScreenState extends State<BooksScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Wyszukiwanie książek',
+              strings.booksSearchTitle,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 16),
@@ -86,10 +96,10 @@ class _BooksScreenState extends State<BooksScreen> {
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: 'Tytuł, autor lub ISBN',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: strings.booksSearchHint,
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
                     ),
                     onSubmitted: (_) => _search(),
                   ),
@@ -103,8 +113,8 @@ class _BooksScreenState extends State<BooksScreen> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.tune),
-                  label: const Text('Szukaj'),
+                      : const Icon(Icons.search),
+                  label: Text(strings.searchButton),
                 ),
               ],
             ),
@@ -112,7 +122,7 @@ class _BooksScreenState extends State<BooksScreen> {
             if (_loading) const LinearProgressIndicator(),
             const SizedBox(height: 8),
             Expanded(
-              child: _buildBody(),
+              child: _buildBody(context),
             ),
           ],
         ),
@@ -120,7 +130,9 @@ class _BooksScreenState extends State<BooksScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
+    final strings = context.strings;
+
     if (_loading) {
       return ListView.separated(
         itemCount: 6,
@@ -134,18 +146,18 @@ class _BooksScreenState extends State<BooksScreen> {
     }
 
     if (!_hasSearched) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.menu_book_outlined,
-        title: 'Brak wyników startowych',
-        message: 'Wpisz frazę i rozpocznij wyszukiwanie książek.',
+        title: strings.noInitialResultsTitle,
+        message: strings.noInitialBooksMessage,
       );
     }
 
     if (_items.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.search_off,
-        title: 'Brak wyników',
-        message: 'Backend zwrócił pustą listę książek dla tego zapytania.',
+        title: strings.noResultsTitle,
+        message: strings.noBooksResultsMessage,
       );
     }
 
@@ -162,7 +174,6 @@ class _BooksScreenState extends State<BooksScreen> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 56,
@@ -180,11 +191,11 @@ class _BooksScreenState extends State<BooksScreen> {
                       children: [
                         Text(item.title, style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text(item.authors.isEmpty ? 'Brak autora' : item.authors.join(', ')),
+                        Text(item.authors.isEmpty ? strings.noAuthor : item.authors.join(', ')),
                         const SizedBox(height: 4),
-                        Text('Gatunek: ${item.genre ?? '-'}'),
+                        Text(strings.genreValue(strings.valueOrDash(item.genre))),
                         const SizedBox(height: 4),
-                        Text('Oferty: ${item.offersCount}'),
+                        Text(strings.offersCount(item.offersCount)),
                       ],
                     ),
                   ),
@@ -192,18 +203,20 @@ class _BooksScreenState extends State<BooksScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      IconButton(
-                        onPressed: () => widget.onToggleSaved(item),
-                        icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
-                      ),
                       Text(
                         item.priceRange == null
                             ? '-'
                             : '${item.priceRange!.min.toStringAsFixed(2)} - ${item.priceRange!.max.toStringAsFixed(2)} ${item.priceRange!.currency}',
-                        textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.labelLarge,
+                        textAlign: TextAlign.right,
+                      ),
+                      const SizedBox(height: 8),
+                      IconButton(
+                        onPressed: () => widget.onToggleSaved(item),
+                        icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
                       ),
                     ],
-                  ),
+                  )
                 ],
               ),
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
 import '../models/app_models.dart';
 import '../services/api_service.dart';
 import '../widgets/skeletons.dart';
@@ -68,26 +69,29 @@ class _CurrenciesScreenState extends State<CurrenciesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.strings;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Wybór waluty', style: Theme.of(context).textTheme.headlineSmall),
+            Text(strings.currenciesTitle, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
-            Text('Aktualna waluta: ${widget.selectedCurrency}'),
+            Text('${strings.currentCurrencyLabel}: ${widget.selectedCurrency}'),
             const SizedBox(height: 16),
             if (_loading) const LinearProgressIndicator(),
             const SizedBox(height: 8),
-            Expanded(child: _buildBody()),
+            Expanded(child: _buildBody(context)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
+    final strings = context.strings;
+
     if (_loading) {
       return ListView.separated(
         itemCount: 6,
@@ -101,10 +105,10 @@ class _CurrenciesScreenState extends State<CurrenciesScreen> {
     }
 
     if (_items.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.currency_exchange,
-        title: 'Brak walut',
-        message: 'Backend zwrócił pustą listę walut.',
+        title: strings.noCurrenciesTitle,
+        message: strings.noCurrenciesMessage,
       );
     }
 
@@ -123,10 +127,10 @@ class _CurrenciesScreenState extends State<CurrenciesScreen> {
                 widget.onSelectCurrency(value);
               }
             },
-            title: Text(item.code.isEmpty ? 'Brak kodu' : item.code),
+            title: Text(item.code.isEmpty ? strings.missingCode : item.code),
             subtitle: Text(
-              '${item.name.isEmpty ? 'Brak nazwy' : item.name}\n'
-              'Kurs: ${item.rate.toStringAsFixed(4)}   Data: ${item.rateDate.isEmpty ? '-' : item.rateDate}',
+              '${item.name.isEmpty ? strings.missingName : item.name}\n'
+              '${strings.rateLabel}: ${item.rate.toStringAsFixed(4)}   ${strings.dateLabel}: ${item.rateDate.isEmpty ? '-' : item.rateDate}',
             ),
             secondary: isSelected ? const Icon(Icons.check_circle) : const Icon(Icons.circle_outlined),
           ),

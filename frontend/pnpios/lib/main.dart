@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'dialogs/author_details_dialog.dart';
 import 'dialogs/book_details_dialog.dart';
+import 'localization/app_strings.dart';
 import 'models/app_models.dart';
 import 'screens/authors_screen.dart';
 import 'screens/books_screen.dart';
@@ -9,6 +13,7 @@ import 'screens/currencies_screen.dart';
 import 'screens/saved_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/api_service.dart';
+import 'services/local_storage_service.dart';
 import 'widgets/side_nav_bar.dart';
 
 void main() {
@@ -23,7 +28,9 @@ class BookFinderApp extends StatefulWidget {
 }
 
 class _BookFinderAppState extends State<BookFinderApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final ApiService _apiService = ApiService();
+  final LocalStorageService _localStorageService = LocalStorageService();
 
   AppSection _selectedSection = AppSection.books;
   String _selectedCurrency = 'PLN';
@@ -31,33 +38,277 @@ class _BookFinderAppState extends State<BookFinderApp> {
   double _textScale = 1.0;
   bool _highContrast = false;
 
+  bool _appLoading = true;
+  AppStrings? _strings;
+  bool _savedLoading = false;
+  String? _savedError;
+
   final Map<String, BookListItem> _savedBooks = <String, BookListItem>{};
   final Map<String, AuthorSearchItem> _savedAuthors = <String, AuthorSearchItem>{};
 
-  void _toggleSavedBook(BookListItem item) {
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final stored = await _localStorageService.loadState();
+    if (!mounted) return;
+
     setState(() {
-      if (_savedBooks.containsKey(item.id)) {
+      _selectedCurrency = stored.selectedCurrency;
+      _language = stored.language;
+      _textScale = stored.textScale;
+      _highContrast = stored.highContrast;
+    });
+
+    final loadedStrings = await AppStringsLoader.load(_language);
+
+    if (!mounted) return;
+    setState(() {
+      _strings = loadedStrings;
+    });
+
+    await _refreshSavedItems(
+      bookIds: stored.savedBookIds,
+      authorIds: stored.savedAuthorIds,
+      showLoading: stored.savedBookIds.isNotEmpty || stored.savedAuthorIds.isNotEmpty,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _appLoading = false;
+    });
+  }
+
+  Future<void> _loadStringsForLanguage(String languageCode) async {
+    final loadedStrings = await AppStringsLoader.load(languageCode);
+    if (!mounted) return;
+    setState(() {
+      _strings = loadedStrings;
+    });
+  }
+
+  Future<void> _persistSettings() {
+    return _localStorageService.saveSettings(
+      selectedCurrency: _selectedCurrency,
+      language: _language,
+      textScale: _textScale,
+      highContrast: _highContrast,
+    );
+  }
+
+  Future<void> _persistSavedIds() async {
+    await _localStorageService.saveSavedBookIds(_savedBooks.keys.toSet());
+    await _localStorageService.saveSavedAuthorIds(_savedAuthors.keys.toSet());
+  }
+
+  Future<void> _toggleSavedBook(BookListItem item) async {
+    final isRemoving = _savedBooks.containsKey(item.id);
+
+    setState(() {
+      if (isRemoving) {
         _savedBooks.remove(item.id);
       } else {
         _savedBooks[item.id] = item;
       }
     });
+
+    await _persistSavedIds();
+
+    if (!isRemoving) {
+      await _refreshSingleSavedBook(item.id);
+    }
   }
 
-  void _toggleSavedAuthor(AuthorSearchItem item) {
+  Future<void> _toggleSavedAuthor(AuthorSearchItem item) async {
+    final isRemoving = _savedAuthors.containsKey(item.id);
+
     setState(() {
-      if (_savedAuthors.containsKey(item.id)) {
+      if (isRemoving) {
         _savedAuthors.remove(item.id);
       } else {
         _savedAuthors[item.id] = item;
       }
     });
+
+    await _persistSavedIds();
+
+    if (!isRemoving) {
+      await _refreshSingleSavedAuthor(item.id);
+    }
+  }
+
+  Future<void> _refreshSingleSavedBook(String bookId) async {
+    try {
+      final details = await _apiService.getBookDetails(bookId: bookId, currency: _selectedCurrency);
+      if (!mounted) return;
+      setState(() {
+        _savedBooks[bookId] = _mapBookDetailsToListItem(details);
+      });
+      await _persistSavedIds();
+    } catch (_) {
+      // Keep the locally visible item if the refresh fails.
+    }
+  }
+
+  Future<void> _refreshSingleSavedAuthor(String authorId) async {
+    try {
+      final details = await _apiService.getAuthorDetails(authorId: authorId);
+      if (!mounted) return;
+      setState(() {
+        _savedAuthors[authorId] = _mapAuthorDetailsToSearchItem(details);
+      });
+      await _persistSavedIds();
+    } catch (_) {
+      // Keep the locally visible item if the refresh fails.
+    }
+  }
+
+  Future<void> _refreshSavedBooksOnly() {
+    return _refreshSavedItems(
+      bookIds: _savedBooks.keys.toSet(),
+      authorIds: _savedAuthors.keys.toSet(),
+      showLoading: _selectedSection == AppSection.saved,
+    );
+  }
+
+  Future<void> _refreshSavedItems({
+    Set<String>? bookIds,
+    Set<String>? authorIds,
+    bool showLoading = true,
+  }) async {
+    final targetBookIds = bookIds ?? _savedBooks.keys.toSet();
+    final targetAuthorIds = authorIds ?? _savedAuthors.keys.toSet();
+
+    if (showLoading && mounted) {
+      setState(() {
+        _savedLoading = true;
+        _savedError = null;
+      });
+    }
+
+    final updatedBooks = <String, BookListItem>{};
+    final updatedAuthors = <String, AuthorSearchItem>{};
+    String? error;
+
+    for (final id in targetBookIds) {
+      try {
+        final details = await _apiService.getBookDetails(bookId: id, currency: _selectedCurrency);
+        updatedBooks[id] = _mapBookDetailsToListItem(details);
+      } catch (e) {
+        error ??= e.toString();
+        if (_savedBooks.containsKey(id)) {
+          updatedBooks[id] = _savedBooks[id]!;
+        }
+      }
+    }
+
+    for (final id in targetAuthorIds) {
+      try {
+        final details = await _apiService.getAuthorDetails(authorId: id);
+        updatedAuthors[id] = _mapAuthorDetailsToSearchItem(details);
+      } catch (e) {
+        error ??= e.toString();
+        if (_savedAuthors.containsKey(id)) {
+          updatedAuthors[id] = _savedAuthors[id]!;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _savedBooks
+        ..clear()
+        ..addAll(updatedBooks);
+      _savedAuthors
+        ..clear()
+        ..addAll(updatedAuthors);
+      _savedError = error;
+      _savedLoading = false;
+    });
+
+    await _persistSavedIds();
+  }
+
+  PriceRange? _buildPriceRange(List<OfferItem> offers) {
+    if (offers.isEmpty) {
+      return null;
+    }
+
+    final amounts = offers.map((offer) => offer.convertedPrice.amount).toList();
+    final minAmount = amounts.reduce(math.min);
+    final maxAmount = amounts.reduce(math.max);
+    return PriceRange(
+      min: minAmount,
+      max: maxAmount,
+      currency: offers.first.convertedPrice.currency,
+    );
+  }
+
+  BookListItem _mapBookDetailsToListItem(BookDetails details) {
+    return BookListItem(
+      id: details.id,
+      title: details.title,
+      subtitle: details.subtitle,
+      authors: details.authors.map((author) => author.name).toList(),
+      coverUrl: details.coverUrl,
+      language: details.language,
+      genre: details.genres.isEmpty ? null : details.genres.first,
+      isbn13: details.isbn13,
+      offersCount: details.offers.length,
+      priceRange: _buildPriceRange(details.offers),
+    );
+  }
+
+  AuthorSearchItem _mapAuthorDetailsToSearchItem(AuthorDetails details) {
+    return AuthorSearchItem(
+      id: details.id,
+      name: details.name,
+      birthYear: details.birthYear,
+      deathYear: details.deathYear,
+      photoUrl: details.photoUrl,
+      booksCount: details.books.length,
+    );
+  }
+
+  Future<void> _setSelectedCurrency(String currency) async {
+    setState(() {
+      _selectedCurrency = currency;
+    });
+    await _persistSettings();
+    await _refreshSavedBooksOnly();
+  }
+
+  Future<void> _setLanguage(String language) async {
+    await _loadStringsForLanguage(language);
+    if (!mounted) return;
+    setState(() {
+      _language = language;
+    });
+    await _persistSettings();
+  }
+
+  Future<void> _setTextScale(double value) async {
+    setState(() {
+      _textScale = value;
+    });
+    await _persistSettings();
+  }
+
+  Future<void> _setHighContrast(bool value) async {
+    setState(() {
+      _highContrast = value;
+    });
+    await _persistSettings();
   }
 
   Future<void> _openBookDialog(String bookId) async {
-    if (!mounted) return;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
     await showDialog<void>(
-      context: context,
+      context: dialogContext,
       builder: (context) => BookDetailsDialog(
         apiService: _apiService,
         bookId: bookId,
@@ -67,14 +318,17 @@ class _BookFinderAppState extends State<BookFinderApp> {
   }
 
   Future<void> _openAuthorDialog(String authorId) async {
-    if (!mounted) return;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
     await showDialog<void>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AuthorDetailsDialog(
         apiService: _apiService,
         authorId: authorId,
         currency: _selectedCurrency,
-        onOpenBook: _openBookDialog,
+        onOpenBook: (bookId) {
+            _openBookDialog(bookId);
+          },
       ),
     );
   }
@@ -86,24 +340,30 @@ class _BookFinderAppState extends State<BookFinderApp> {
           apiService: _apiService,
           currency: _selectedCurrency,
           savedBookIds: _savedBooks.keys.toSet(),
-          onToggleSaved: _toggleSavedBook,
-          onOpenBook: _openBookDialog,
+          onToggleSaved: (item) {
+            _toggleSavedBook(item);
+          },
+          onOpenBook: (bookId) {
+            _openBookDialog(bookId);
+          },
         );
       case AppSection.authors:
         return AuthorsScreen(
           apiService: _apiService,
           savedAuthorIds: _savedAuthors.keys.toSet(),
-          onToggleSaved: _toggleSavedAuthor,
-          onOpenAuthor: _openAuthorDialog,
+          onToggleSaved: (item) {
+            _toggleSavedAuthor(item);
+          },
+          onOpenAuthor: (authorId) {
+            _openAuthorDialog(authorId);
+          },
         );
       case AppSection.currencies:
         return CurrenciesScreen(
           apiService: _apiService,
           selectedCurrency: _selectedCurrency,
           onSelectCurrency: (currency) {
-            setState(() {
-              _selectedCurrency = currency;
-            });
+            _setSelectedCurrency(currency);
           },
         );
       case AppSection.saved:
@@ -111,10 +371,23 @@ class _BookFinderAppState extends State<BookFinderApp> {
           savedBooks: _savedBooks.values.toList(),
           savedAuthors: _savedAuthors.values.toList(),
           currency: _selectedCurrency,
-          onOpenBook: _openBookDialog,
-          onOpenAuthor: _openAuthorDialog,
-          onRemoveBook: (item) => _toggleSavedBook(item),
-          onRemoveAuthor: (item) => _toggleSavedAuthor(item),
+          loading: _savedLoading,
+          error: _savedError,
+          onRefresh: () {
+            _refreshSavedItems(showLoading: true);
+          },
+          onOpenBook: (bookId) {
+            _openBookDialog(bookId);
+          },
+          onOpenAuthor: (authorId) {
+            _openAuthorDialog(authorId);
+          },
+          onRemoveBook: (item) {
+            _toggleSavedBook(item);
+          },
+          onRemoveAuthor: (item) {
+            _toggleSavedAuthor(item);
+          },
         );
       case AppSection.settings:
         return SettingsScreen(
@@ -122,19 +395,13 @@ class _BookFinderAppState extends State<BookFinderApp> {
           textScale: _textScale,
           highContrast: _highContrast,
           onLanguageChanged: (value) {
-            setState(() {
-              _language = value;
-            });
+            _setLanguage(value);
           },
           onTextScaleChanged: (value) {
-            setState(() {
-              _textScale = value;
-            });
+            _setTextScale(value);
           },
           onHighContrastChanged: (value) {
-            setState(() {
-              _highContrast = value;
-            });
+            _setHighContrast(value);
           },
         );
     }
@@ -142,9 +409,30 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = _strings;
+
+    if (strings == null) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Book Finder',
+      title: strings.appTitle,
+      locale: Locale(_language),
+      supportedLocales: AppStringsLoader.supportedLanguageCodes
+          .map(Locale.new)
+          .toList(growable: false),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         brightness: _highContrast ? Brightness.dark : Brightness.light,
@@ -153,27 +441,35 @@ class _BookFinderAppState extends State<BookFinderApp> {
       ),
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
-        return MediaQuery(
-          data: mediaQuery.copyWith(
-            textScaler: TextScaler.linear(_textScale),
+        return AppStringsScope(
+          strings: strings,
+          child: MediaQuery(
+            data: mediaQuery.copyWith(
+              textScaler: TextScaler.linear(_textScale),
+            ),
+            child: child ?? const SizedBox.shrink(),
           ),
-          child: child ?? const SizedBox.shrink(),
         );
       },
       home: Scaffold(
-        body: Row(
-          children: [
-            SideNavBar(
-              selected: _selectedSection,
-              onSelect: (section) {
-                setState(() {
-                  _selectedSection = section;
-                });
-              },
-            ),
-            Expanded(child: _buildContent()),
-          ],
-        ),
+        body: _appLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Row(
+                children: [
+                  SideNavBar(
+                    selected: _selectedSection,
+                    onSelect: (section) {
+                      setState(() {
+                        _selectedSection = section;
+                      });
+                      if (section == AppSection.saved) {
+                        _refreshSavedItems(showLoading: true);
+                      }
+                    },
+                  ),
+                  Expanded(child: _buildContent()),
+                ],
+              ),
       ),
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
+
 class SettingsScreen extends StatelessWidget {
   final String selectedLanguage;
   final double textScale;
@@ -20,22 +22,23 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.strings;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            Text('Ustawienia aplikacji', style: Theme.of(context).textTheme.headlineSmall),
+            Text(strings.settingsTitle, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 20),
             DropdownButtonFormField<String>(
               value: selectedLanguage,
-              decoration: const InputDecoration(
-                labelText: 'Language',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: strings.languageLabel,
+                border: const OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(value: 'pl', child: Text('Polski')),
-                DropdownMenuItem(value: 'en', child: Text('English')),
+              items: [
+                DropdownMenuItem(value: 'pl', child: Text(strings.polish)),
+                DropdownMenuItem(value: 'en', child: Text(strings.english)),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -44,7 +47,7 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
             const SizedBox(height: 28),
-            Text('TEXT SIZE', style: Theme.of(context).textTheme.labelLarge),
+            Text(strings.textSizeLabel, style: Theme.of(context).textTheme.labelLarge),
             Slider(
               min: 0.8,
               max: 1.6,
@@ -56,7 +59,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 16),
             SwitchListTile(
               value: highContrast,
-              title: const Text('HIGH CONTRAST'),
+              title: Text(strings.highContrastLabel),
               onChanged: onHighContrastChanged,
             ),
           ],

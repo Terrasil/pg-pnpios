@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/app_strings.dart';
 import '../models/app_models.dart';
 import '../services/api_service.dart';
 import '../widgets/skeletons.dart';
@@ -74,6 +75,8 @@ class _AuthorDetailsDialogState extends State<AuthorDetailsDialog> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final strings = context.strings;
+
     if (_loading) {
       return const SingleChildScrollView(child: SkeletonDialogContent());
     }
@@ -84,10 +87,10 @@ class _AuthorDetailsDialogState extends State<AuthorDetailsDialog> {
 
     final details = _details;
     if (details == null) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.info_outline,
-        title: 'Brak danych',
-        message: 'Backend nie zwrócił szczegółów autora.',
+        title: strings.noDataTitle,
+        message: strings.noAuthorDetailsMessage,
       );
     }
 
@@ -113,28 +116,29 @@ class _AuthorDetailsDialogState extends State<AuthorDetailsDialog> {
                 children: [
                   Text(details.name, style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 8),
-                  Text('Data urodzenia: ${details.birthYear?.toString() ?? '-'}'),
-                  Text('Data śmierci: ${details.deathYear?.toString() ?? '-'}'),
+                  Text(strings.birthDateValue(details.birthYear?.toString() ?? '-')),
+                  Text(strings.deathDateValue(details.deathYear?.toString() ?? '-')),
                 ],
               ),
             ),
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
+              tooltip: strings.closeButton,
               icon: const Icon(Icons.close),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        Text(details.biography?.trim().isNotEmpty == true ? details.biography! : 'Brak opisu autora.'),
+        Text(details.biography?.trim().isNotEmpty == true ? details.biography! : strings.missingAuthorDescription),
         const SizedBox(height: 16),
-        Text('Książki autora', style: Theme.of(context).textTheme.titleLarge),
+        Text(strings.authorBooksTitle, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
         Expanded(
           child: details.books.isEmpty
-              ? const EmptyState(
+              ? EmptyState(
                   icon: Icons.library_books_outlined,
-                  title: 'Brak książek',
-                  message: 'Backend nie zwrócił żadnych książek dla tego autora.',
+                  title: strings.noAuthorBooksTitle,
+                  message: strings.noAuthorBooksMessage,
                 )
               : ListView.separated(
                   itemCount: details.books.length,
@@ -145,8 +149,8 @@ class _AuthorDetailsDialogState extends State<AuthorDetailsDialog> {
                       child: ListTile(
                         title: Text(book.title),
                         subtitle: Text(
-                          '${book.genre ?? '-'}\n'
-                          'Oferty: ${book.offersCount}',
+                          '${strings.genreValue(strings.valueOrDash(book.genre))}\n'
+                          '${strings.offersCount(book.offersCount)}',
                         ),
                         isThreeLine: true,
                         trailing: const Icon(Icons.open_in_new),
