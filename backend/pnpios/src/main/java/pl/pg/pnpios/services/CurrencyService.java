@@ -14,19 +14,14 @@ import java.util.Locale;
 
 @Service
 public class CurrencyService {
-
     public CurrencyListResponseDTO getCurrencies(String base) {
         String normalizedBase = normalizeCurrency(base);
-
-        return new CurrencyListResponseDTO(
-            normalizedBase,
-            List.of(
-                new CurrencyRateDTO("PLN", "Polish Zloty", convert(BigDecimal.ONE, "PLN", normalizedBase), LocalDate.now()),
-                new CurrencyRateDTO("USD", "US Dollar", convert(BigDecimal.ONE, "USD", normalizedBase), LocalDate.now()),
-                new CurrencyRateDTO("EUR", "Euro", convert(BigDecimal.ONE, "EUR", normalizedBase), LocalDate.now()),
-                new CurrencyRateDTO("GBP", "British Pound", convert(BigDecimal.ONE, "GBP", normalizedBase), LocalDate.now())
-            )
-        );
+        return new CurrencyListResponseDTO(normalizedBase, List.of(
+            new CurrencyRateDTO("PLN", "Polish Zloty", convert(BigDecimal.ONE, "PLN", normalizedBase), LocalDate.now()),
+            new CurrencyRateDTO("USD", "US Dollar", convert(BigDecimal.ONE, "USD", normalizedBase), LocalDate.now()),
+            new CurrencyRateDTO("EUR", "Euro", convert(BigDecimal.ONE, "EUR", normalizedBase), LocalDate.now()),
+            new CurrencyRateDTO("GBP", "British Pound", convert(BigDecimal.ONE, "GBP", normalizedBase), LocalDate.now())
+        ));
     }
 
     public CurrencyListResponseDTO getRates(String base) {
@@ -36,22 +31,12 @@ public class CurrencyService {
     public CurrencyConvertResponseDTO convert(CurrencyConvertRequestDTO request) {
         BigDecimal convertedAmount = convert(request.amount(), request.from(), request.to());
         BigDecimal rate = convert(BigDecimal.ONE, request.from(), request.to());
-
-        return new CurrencyConvertResponseDTO(
-            request.amount(),
-            normalizeCurrency(request.from()),
-            normalizeCurrency(request.to()),
-            rate,
-            convertedAmount,
-            "STUB_LOCAL_RATES",
-            LocalDate.now()
-        );
+        return new CurrencyConvertResponseDTO(request.amount(), normalizeCurrency(request.from()), normalizeCurrency(request.to()), rate, convertedAmount, "STUB_LOCAL_RATES", LocalDate.now());
     }
 
     private BigDecimal convert(BigDecimal amount, String from, String to) {
         String normalizedFrom = normalizeCurrency(from);
         String normalizedTo = normalizeCurrency(to);
-
         BigDecimal amountInPln = amount.multiply(rateToPln(normalizedFrom));
         return amountInPln.divide(rateToPln(normalizedTo), 2, RoundingMode.HALF_UP);
     }
@@ -67,8 +52,6 @@ public class CurrencyService {
     }
 
     private String normalizeCurrency(String currency) {
-        return currency == null || currency.isBlank()
-            ? "PLN"
-            : currency.trim().toUpperCase(Locale.ROOT);
+        return currency == null || currency.isBlank() ? "PLN" : currency.trim().toUpperCase(Locale.ROOT);
     }
 }

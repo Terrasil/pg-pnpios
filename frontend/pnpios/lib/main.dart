@@ -39,7 +39,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
   bool _highContrast = false;
 
   bool _appLoading = true;
-  AppStrings? _strings;
   bool _savedLoading = false;
   String? _savedError;
 
@@ -63,13 +62,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
       _highContrast = stored.highContrast;
     });
 
-    final loadedStrings = await AppStringsLoader.load(_language);
-
-    if (!mounted) return;
-    setState(() {
-      _strings = loadedStrings;
-    });
-
     await _refreshSavedItems(
       bookIds: stored.savedBookIds,
       authorIds: stored.savedAuthorIds,
@@ -79,14 +71,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
     if (!mounted) return;
     setState(() {
       _appLoading = false;
-    });
-  }
-
-  Future<void> _loadStringsForLanguage(String languageCode) async {
-    final loadedStrings = await AppStringsLoader.load(languageCode);
-    if (!mounted) return;
-    setState(() {
-      _strings = loadedStrings;
     });
   }
 
@@ -282,8 +266,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
   }
 
   Future<void> _setLanguage(String language) async {
-    await _loadStringsForLanguage(language);
-    if (!mounted) return;
     setState(() {
       _language = language;
     });
@@ -409,25 +391,17 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   @override
   Widget build(BuildContext context) {
-    final strings = _strings;
-
-    if (strings == null) {
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
+    final strings = AppStrings(_language);
 
     return MaterialApp(
       navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: strings.appTitle,
       locale: Locale(_language),
-      supportedLocales: AppStringsLoader.supportedLanguageCodes
-          .map(Locale.new)
-          .toList(growable: false),
+      supportedLocales: const [
+        Locale('pl'),
+        Locale('en'),
+      ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

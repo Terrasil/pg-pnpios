@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 class AppStringsScope extends InheritedWidget {
@@ -20,159 +17,129 @@ class AppStringsScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(covariant AppStringsScope oldWidget) {
-    return oldWidget.strings.languageCode != strings.languageCode || oldWidget.strings._values != strings._values;
-  }
-}
-
-class AppStringsLoader {
-  static const List<String> supportedLanguageCodes = <String>['pl', 'en'];
-
-  static Future<AppStrings> load(String languageCode) async {
-    final normalized = _normalizeLanguageCode(languageCode);
-    final data = await _loadJsonMap(normalized);
-    return AppStrings._(normalized, data);
-  }
-
-  static String _normalizeLanguageCode(String languageCode) {
-    final normalized = languageCode.trim().toLowerCase();
-    return supportedLanguageCodes.contains(normalized) ? normalized : 'en';
-  }
-
-  static Future<Map<String, dynamic>> _loadJsonMap(String languageCode) async {
-    final candidates = <String>[
-      'assets/i18n/$languageCode.json',
-      if (languageCode != 'en') 'assets/i18n/en.json',
-    ];
-
-    for (final path in candidates) {
-      try {
-        final raw = await rootBundle.loadString(path);
-        final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) {
-          return decoded;
-        }
-      } catch (_) {
-        // Try next candidate.
-      }
-    }
-
-    throw FlutterError('Could not load localization JSON for language: $languageCode');
+    return oldWidget.strings.languageCode != strings.languageCode;
   }
 }
 
 class AppStrings {
   final String languageCode;
-  final Map<String, dynamic> _values;
 
-  const AppStrings._(this.languageCode, this._values);
+  const AppStrings(this.languageCode);
 
-  String get appTitle => _text('appTitle');
+  bool get isPl => languageCode.toLowerCase() == 'pl';
 
-  String get navBooks => _text('navBooks');
-  String get navAuthors => _text('navAuthors');
-  String get navCurrencies => _text('navCurrencies');
-  String get navSaved => _text('navSaved');
-  String get navSettings => _text('navSettings');
+  String get appTitle => isPl ? 'Wyszukiwarka książek' : 'Book Finder';
 
-  String get booksSearchTitle => _text('booksSearchTitle');
-  String get authorsSearchTitle => _text('authorsSearchTitle');
-  String get currenciesTitle => _text('currenciesTitle');
-  String get savedTitle => _text('savedTitle');
-  String get settingsTitle => _text('settingsTitle');
+  String get navBooks => isPl ? 'Książki' : 'Books';
+  String get navAuthors => isPl ? 'Autorzy' : 'Authors';
+  String get navCurrencies => isPl ? 'Waluty' : 'Currencies';
+  String get navSaved => isPl ? 'Zapisane' : 'Saved';
+  String get navSettings => isPl ? 'Ustawienia' : 'Settings';
 
-  String get searchButton => _text('searchButton');
-  String get booksSearchHint => _text('booksSearchHint');
-  String get authorsSearchHint => _text('authorsSearchHint');
+  String get booksSearchTitle => isPl ? 'Wyszukiwanie książek' : 'Book search';
+  String get authorsSearchTitle => isPl ? 'Wyszukiwanie autorów' : 'Author search';
+  String get currenciesTitle => isPl ? 'Wybór waluty' : 'Currency selection';
+  String get savedTitle => isPl ? 'Zapisane książki i autorzy' : 'Saved books and authors';
+  String get settingsTitle => isPl ? 'Ustawienia aplikacji' : 'Application settings';
 
-  String get noInitialResultsTitle => _text('noInitialResultsTitle');
-  String get noInitialBooksMessage => _text('noInitialBooksMessage');
-  String get noInitialAuthorsMessage => _text('noInitialAuthorsMessage');
+  String get searchButton => isPl ? 'Szukaj' : 'Search';
+  String get booksSearchHint => isPl ? 'Tytuł, autor lub ISBN' : 'Title, author or ISBN';
+  String get authorsSearchHint => isPl ? 'Imię lub nazwisko autora' : 'Author first or last name';
 
-  String get noResultsTitle => _text('noResultsTitle');
-  String get noBooksResultsMessage => _text('noBooksResultsMessage');
-  String get noAuthorsResultsMessage => _text('noAuthorsResultsMessage');
+  String get noInitialResultsTitle => isPl ? 'Brak wyników startowych' : 'No initial results';
+  String get noInitialBooksMessage => isPl
+      ? 'Wpisz frazę i rozpocznij wyszukiwanie książek.'
+      : 'Enter a phrase and start searching for books.';
+  String get noInitialAuthorsMessage => isPl
+      ? 'Wpisz dane autora i rozpocznij wyszukiwanie.'
+      : 'Enter an author name and start searching.';
 
-  String get noCurrenciesTitle => _text('noCurrenciesTitle');
-  String get noCurrenciesMessage => _text('noCurrenciesMessage');
+  String get noResultsTitle => isPl ? 'Brak wyników' : 'No results';
+  String get noBooksResultsMessage => isPl
+      ? 'Backend zwrócił pustą listę książek dla tego zapytania.'
+      : 'The backend returned an empty list of books for this query.';
+  String get noAuthorsResultsMessage => isPl
+      ? 'Backend zwrócił pustą listę autorów dla tego zapytania.'
+      : 'The backend returned an empty list of authors for this query.';
 
-  String get currentCurrencyLabel => _text('currentCurrencyLabel');
-  String get rateLabel => _text('rateLabel');
-  String get dateLabel => _text('dateLabel');
-  String get missingCode => _text('missingCode');
-  String get missingName => _text('missingName');
+  String get noCurrenciesTitle => isPl ? 'Brak walut' : 'No currencies';
+  String get noCurrenciesMessage => isPl
+      ? 'Backend zwrócił pustą listę walut.'
+      : 'The backend returned an empty currency list.';
 
-  String get savedFilterHint => _text('savedFilterHint');
-  String get booksTab => _text('booksTab');
-  String get authorsTab => _text('authorsTab');
-  String get noSavedBooksTitle => _text('noSavedBooksTitle');
-  String get noSavedBooksMessage => _text('noSavedBooksMessage');
-  String get noSavedAuthorsTitle => _text('noSavedAuthorsTitle');
-  String get noSavedAuthorsMessage => _text('noSavedAuthorsMessage');
-  String get refreshSavedButton => _text('refreshSavedButton');
-  String get syncingSavedData => _text('syncingSavedData');
+  String get currentCurrencyLabel => isPl ? 'Aktualna waluta' : 'Current currency';
+  String get rateLabel => isPl ? 'Kurs' : 'Rate';
+  String get dateLabel => isPl ? 'Data' : 'Date';
+  String get missingCode => isPl ? 'Brak kodu' : 'Missing code';
+  String get missingName => isPl ? 'Brak nazwy' : 'Missing name';
 
-  String get languageLabel => _text('languageLabel');
-  String get textSizeLabel => _text('textSizeLabel');
-  String get highContrastLabel => _text('highContrastLabel');
-  String get polish => _text('polish');
-  String get english => _text('english');
+  String get savedFilterHint => isPl ? 'Filtruj zapisane elementy' : 'Filter saved items';
+  String get booksTab => isPl ? 'Książki' : 'Books';
+  String get authorsTab => isPl ? 'Autorzy' : 'Authors';
+  String get noSavedBooksTitle => isPl ? 'Brak zapisanych książek' : 'No saved books';
+  String get noSavedBooksMessage => isPl
+      ? 'Dodaj książki z wyników wyszukiwania.'
+      : 'Add books from the search results.';
+  String get noSavedAuthorsTitle => isPl ? 'Brak zapisanych autorów' : 'No saved authors';
+  String get noSavedAuthorsMessage => isPl
+      ? 'Dodaj autorów z wyników wyszukiwania.'
+      : 'Add authors from the search results.';
+  String get refreshSavedButton => isPl ? 'Odśwież z API' : 'Refresh from API';
+  String get syncingSavedData => isPl ? 'Odświeżanie zapisanych danych z API…' : 'Refreshing saved data from API…';
 
-  String get noDataTitle => _text('noDataTitle');
-  String get noBookDetailsMessage => _text('noBookDetailsMessage');
-  String get noAuthorDetailsMessage => _text('noAuthorDetailsMessage');
-  String get missingBookDescription => _text('missingBookDescription');
-  String get missingAuthorDescription => _text('missingAuthorDescription');
-  String get offersTitle => _text('offersTitle');
-  String get noOffersTitle => _text('noOffersTitle');
-  String get noOffersMessage => _text('noOffersMessage');
-  String get authorBooksTitle => _text('authorBooksTitle');
-  String get noAuthorBooksTitle => _text('noAuthorBooksTitle');
-  String get noAuthorBooksMessage => _text('noAuthorBooksMessage');
+  String get languageLabel => isPl ? 'Język' : 'Language';
+  String get textSizeLabel => isPl ? 'Rozmiar tekstu' : 'Text size';
+  String get highContrastLabel => isPl ? 'Wysoki kontrast' : 'High contrast';
+  String get polish => isPl ? 'Polski' : 'Polish';
+  String get english => isPl ? 'Angielski' : 'English';
 
-  String get copyOfferUrlTooltip => _text('copyOfferUrlTooltip');
-  String get openOfferTooltip => _text('openOfferTooltip');
-  String get offerUrlCopied => _text('offerUrlCopied');
-  String get invalidOfferUrl => _text('invalidOfferUrl');
-  String get failedOpenUrl => _text('failedOpenUrl');
+  String get noDataTitle => isPl ? 'Brak danych' : 'No data';
+  String get noBookDetailsMessage => isPl
+      ? 'Backend nie zwrócił szczegółów książki.'
+      : 'The backend did not return book details.';
+  String get noAuthorDetailsMessage => isPl
+      ? 'Backend nie zwrócił szczegółów autora.'
+      : 'The backend did not return author details.';
+  String get missingBookDescription => isPl ? 'Brak opisu książki.' : 'No book description.';
+  String get missingAuthorDescription => isPl ? 'Brak opisu autora.' : 'No author description.';
+  String get offersTitle => isPl ? 'Oferty' : 'Offers';
+  String get noOffersTitle => isPl ? 'Brak ofert' : 'No offers';
+  String get noOffersMessage => isPl
+      ? 'Backend nie zwrócił żadnych ofert dla tej książki.'
+      : 'The backend did not return any offers for this book.';
+  String get authorBooksTitle => isPl ? 'Książki autora' : 'Author books';
+  String get noAuthorBooksTitle => isPl ? 'Brak książek' : 'No books';
+  String get noAuthorBooksMessage => isPl
+      ? 'Backend nie zwrócił żadnych książek dla tego autora.'
+      : 'The backend did not return any books for this author.';
 
-  String get loadErrorTitle => _text('loadErrorTitle');
-  String get retryButton => _text('retryButton');
-  String get closeButton => _text('closeButton');
+  String get copyOfferUrlTooltip => isPl ? 'Kopiuj link oferty' : 'Copy offer link';
+  String get openOfferTooltip => isPl ? 'Otwórz link oferty' : 'Open offer link';
+  String get offerUrlCopied => isPl ? 'Skopiowano link oferty' : 'Offer link copied';
+  String get invalidOfferUrl => isPl ? 'Niepoprawny link oferty' : 'Invalid offer link';
+  String get failedOpenUrl => isPl ? 'Nie udało się otworzyć linku' : 'Could not open the link';
 
-  String get noAuthor => _text('noAuthor');
+  String get loadErrorTitle => isPl ? 'Nie udało się pobrać danych' : 'Could not load data';
+  String get retryButton => isPl ? 'Spróbuj ponownie' : 'Try again';
+  String get closeButton => isPl ? 'Zamknij' : 'Close';
 
+  String get noAuthor => isPl ? 'Brak autora' : 'No author';
   String valueOrDash(String? value) => (value == null || value.trim().isEmpty) ? '-' : value;
 
-  String authorLabel(String value) => _format('authorLabel', {'value': value});
-  String languageValue(String value) => _format('languageValue', {'value': value});
-  String publisherValue(String value) => _format('publisherValue', {'value': value});
-  String yearValue(String value) => _format('yearValue', {'value': value});
-  String birthDateValue(String value) => _format('birthDateValue', {'value': value});
-  String deathDateValue(String value) => _format('deathDateValue', {'value': value});
-  String genreValue(String value) => _format('genreValue', {'value': value});
-  String offersCount(int count) => _format('offersCount', {'count': count.toString()});
-  String booksCount(int count) => _format('booksCount', {'count': count.toString()});
-  String simpleBooksCount(int count) => _format('simpleBooksCount', {'count': count.toString()});
-  String priceValue(String value) => _format('priceValue', {'value': value});
-  String originalPriceValue(String value) => _format('originalPriceValue', {'value': value});
-  String convertedPriceValue(String value) => _format('convertedPriceValue', {'value': value});
-  String availabilityValue(String value) => _format('availabilityValue', {'value': value});
-
-  String _text(String key) {
-    final value = _values[key];
-    if (value is String && value.isNotEmpty) {
-      return value;
-    }
-    return key;
-  }
-
-  String _format(String key, Map<String, String> params) {
-    var template = _text(key);
-    params.forEach((placeholder, value) {
-      template = template.replaceAll('{$placeholder}', value);
-    });
-    return template;
-  }
+  String authorLabel(String value) => isPl ? 'Autor: $value' : 'Author: $value';
+  String languageValue(String value) => isPl ? 'Język: $value' : 'Language: $value';
+  String publisherValue(String value) => isPl ? 'Wydawca: $value' : 'Publisher: $value';
+  String yearValue(String value) => isPl ? 'Rok: $value' : 'Year: $value';
+  String birthDateValue(String value) => isPl ? 'Data urodzenia: $value' : 'Birth date: $value';
+  String deathDateValue(String value) => isPl ? 'Data śmierci: $value' : 'Death date: $value';
+  String genreValue(String value) => isPl ? 'Gatunek: $value' : 'Genre: $value';
+  String offersCount(int count) => isPl ? 'Oferty: $count' : 'Offers: $count';
+  String booksCount(int count) => isPl ? 'Liczba książek: $count' : 'Books: $count';
+  String simpleBooksCount(int count) => isPl ? 'Książki: $count' : 'Books: $count';
+  String priceValue(String value) => isPl ? 'Cena: $value' : 'Price: $value';
+  String originalPriceValue(String value) => isPl ? 'Cena oryginalna: $value' : 'Original price: $value';
+  String convertedPriceValue(String value) => isPl ? 'Cena po przeliczeniu: $value' : 'Converted price: $value';
+  String availabilityValue(String value) => isPl ? 'Dostępność: $value' : 'Availability: $value';
 }
 
 extension AppStringsBuildContext on BuildContext {

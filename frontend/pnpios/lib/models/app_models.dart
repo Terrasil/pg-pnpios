@@ -360,3 +360,98 @@ class CurrencyListResponse {
     );
   }
 }
+
+
+class CurrencyConvertRequest {
+  final double amount;
+  final String from;
+  final String to;
+
+  const CurrencyConvertRequest({
+    required this.amount,
+    required this.from,
+    required this.to,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'amount': amount,
+        'from': from,
+        'to': to,
+      };
+}
+
+class CurrencyConversionResult {
+  final double amount;
+  final String from;
+  final String to;
+  final double rate;
+  final double convertedAmount;
+  final String provider;
+  final String rateDate;
+
+  const CurrencyConversionResult({
+    required this.amount,
+    required this.from,
+    required this.to,
+    required this.rate,
+    required this.convertedAmount,
+    required this.provider,
+    required this.rateDate,
+  });
+
+  factory CurrencyConversionResult.fromJson(Map<String, dynamic> json) {
+    return CurrencyConversionResult(
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      from: (json['from'] as String?) ?? '',
+      to: (json['to'] as String?) ?? '',
+      rate: (json['rate'] as num?)?.toDouble() ?? 0.0,
+      convertedAmount: (json['convertedAmount'] as num?)?.toDouble() ?? 0.0,
+      provider: (json['provider'] as String?) ?? '',
+      rateDate: (json['rateDate'] as String?) ?? '',
+    );
+  }
+}
+
+class ApiErrorResponse {
+  final String? timestamp;
+  final int status;
+  final String error;
+  final String message;
+  final String? path;
+  final List<String> details;
+
+  const ApiErrorResponse({
+    required this.timestamp,
+    required this.status,
+    required this.error,
+    required this.message,
+    required this.path,
+    required this.details,
+  });
+
+  factory ApiErrorResponse.fromJson(Map<String, dynamic> json) {
+    return ApiErrorResponse(
+      timestamp: json['timestamp'] as String?,
+      status: (json['status'] as num?)?.toInt() ?? 500,
+      error: (json['error'] as String?) ?? 'Error',
+      message: (json['message'] as String?) ?? 'Unknown error',
+      path: json['path'] as String?,
+      details: (json['details'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+    );
+  }
+}
+
+enum OfferSortType { priceAsc, priceDesc, sourceAsc }
+
+extension OfferSortTypeApi on OfferSortType {
+  String get apiValue {
+    switch (this) {
+      case OfferSortType.priceAsc:
+        return 'PRICE_ASC';
+      case OfferSortType.priceDesc:
+        return 'PRICE_DESC';
+      case OfferSortType.sourceAsc:
+        return 'SOURCE_ASC';
+    }
+  }
+}
