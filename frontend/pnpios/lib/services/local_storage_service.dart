@@ -25,6 +25,9 @@ class LocalStorageService {
   static const String _highContrastKey = 'high_contrast';
   static const String _savedBookIdsKey = 'saved_book_ids';
   static const String _savedAuthorIdsKey = 'saved_author_ids';
+  static const String _bookSearchHistoryKey = 'book_search_history';
+  static const String _authorSearchHistoryKey = 'author_search_history';
+  static const int _maxHistoryItems = 12;
 
   Future<StoredAppState> loadState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,5 +62,46 @@ class LocalStorageService {
   Future<void> saveSavedAuthorIds(Set<String> ids) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_savedAuthorIdsKey, ids.toList()..sort());
+  }
+
+  Future<List<String>> loadBookSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_bookSearchHistoryKey) ?? const <String>[];
+  }
+
+  Future<List<String>> loadAuthorSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_authorSearchHistoryKey) ?? const <String>[];
+  }
+
+  Future<void> addBookSearchHistory(String query) async {
+    await _addSearchHistory(_bookSearchHistoryKey, query);
+  }
+
+  Future<void> addAuthorSearchHistory(String query) async {
+    await _addSearchHistory(_authorSearchHistoryKey, query);
+  }
+
+  Future<void> clearBookSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_bookSearchHistoryKey);
+  }
+
+  Future<void> clearAuthorSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_authorSearchHistoryKey);
+  }
+
+  Future<void> _addSearchHistory(String key, String query) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getStringList(key) ?? <String>[];
+    final updated = <String>[normalized, ...current.where((item) => item.toLowerCase() != normalized.toLowerCase())];
+    if (updated.length > _maxHistoryItems) {
+      updated.removeRange(_maxHistoryItems, updated.length);
+    }
+    await prefs.setStringList(key, updated);
   }
 }

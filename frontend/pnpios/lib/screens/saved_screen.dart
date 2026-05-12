@@ -83,7 +83,7 @@ class _SavedScreenState extends State<SavedScreen> with SingleTickerProviderStat
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh),
-                  label: Text(strings.refreshSavedButton),
+                  label: Text(strings.refreshSavedButton), // TODO: zmienić metode odświeżania danych
                 ),
               ],
             ),

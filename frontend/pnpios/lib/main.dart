@@ -35,6 +35,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
   AppSection _selectedSection = AppSection.books;
   String _selectedCurrency = 'PLN';
   String _language = 'pl';
+  AppStrings? _strings;
   double _textScale = 1.0;
   bool _highContrast = false;
 
@@ -53,6 +54,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   Future<void> _bootstrap() async {
     final stored = await _localStorageService.loadState();
+    final strings = await AppStrings.load(stored.language);
     if (!mounted) return;
 
     setState(() {
@@ -60,6 +62,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
       _language = stored.language;
       _textScale = stored.textScale;
       _highContrast = stored.highContrast;
+      _strings = strings;
     });
 
     await _refreshSavedItems(
@@ -391,7 +394,17 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   @override
   Widget build(BuildContext context) {
-    final strings = AppStrings(_language);
+    if (_strings == null) {
+      return const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    final strings = _strings!;
 
     return MaterialApp(
       navigatorKey: _navigatorKey,

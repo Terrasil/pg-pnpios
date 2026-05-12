@@ -25,14 +25,27 @@ class BookDetailsDialog extends StatefulWidget {
 }
 
 class _BookDetailsDialogState extends State<BookDetailsDialog> {
+  final TextEditingController _offerSearchController = TextEditingController();
   BookDetails? _details;
+  List<OfferItem> _offers = const [];
   bool _loading = true;
+  bool _offersLoading = false;
   String? _error;
+  String _offerQuery = '';
+  OfferSortType _selectedSort = OfferSortType.priceAsc;
+  String? _selectedSource;
+  List<String> _knownSources = const [];
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _offerSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -49,6 +62,8 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
       if (!mounted) return;
       setState(() {
         _details = details;
+        _offers = details.offers;
+        _knownSources = details.offers.map((offer) => offer.source).where((value) => value.trim().isNotEmpty).toSet().toList()..sort();
       });
     } catch (e) {
       if (!mounted) return;
@@ -61,6 +76,45 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _reloadOffers() async {
+    setState(() {
+      _offersLoading = true;
+    });
+
+    try {
+      final offers = await widget.apiService.getBookOffers(
+        bookId: widget.bookId,
+        currency: widget.currency,
+        sort: _selectedSort,
+        source: _selectedSource,
+      );
+      if (!mounted) return;
+      setState(() {
+        _offers = offers;
+        final mergedSources = {..._knownSources, ...offers.map((offer) => offer.source).where((value) => value.trim().isNotEmpty)}.toList()..sort();
+        _knownSources = mergedSources;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _offersLoading = false;
+      });
+    }
+  }
+
+  List<OfferItem> get _visibleOffers {
+    if (_offerQuery.trim().isEmpty) return _offers;
+    final query = _offerQuery.trim().toLowerCase();
+    return _offers.where((offer) {
+      return offer.source.toLowerCase().contains(query) ||
+          offer.offerUrl.toLowerCase().contains(query) ||
+          offer.availability.toLowerCase().contains(query);
+    }).toList();
   }
 
   Future<void> _copyOfferUrl(String url) async {
@@ -89,6 +143,95 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
         SnackBar(content: Text(strings.failedOpenUrl)),
       );
     }
+  }
+
+  String _sortLabel(BuildContext context, OfferSortType value) {
+    final strings = context.strings;
+    switch (value) {
+      case OfferSortType.priceAsc:
+        return strings.sortPriceAsc;
+      case OfferSortType.priceDesc:
+        return strings.sortPriceDesc;
+      case OfferSortType.sourceAsc:
+        return strings.sortSourceAsc;
+    }
+  }
+
+  Future<void> _showOfferFiltersPopup() async {
+    final strings = context.strings;
+    var tempSort = _selectedSort;
+    String? tempSource = _selectedSource;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(strings.filterButton),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(strings.sortLabel, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  ...OfferSortType.values.map(
+                    (sort) => RadioListTile<OfferSortType>(
+                      value: sort,
+                      groupValue: tempSort,
+                      title: Text(_sortLabel(context, sort)),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            tempSort = value;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(strings.sourceFilterLabel, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String?>(
+                    value: tempSource,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem<String?>(value: null, child: Text(strings.allSourcesOption)),
+                      ..._knownSources.map((source) => DropdownMenuItem<String?>(value: source, child: Text(source))),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() {
+                        tempSource = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                _selectedSort = OfferSortType.priceAsc;
+                _selectedSource = null;
+                Navigator.of(dialogContext).pop();
+                await _reloadOffers();
+              },
+              child: Text(strings.clearButton),
+            ),
+            FilledButton(
+              onPressed: () async {
+                _selectedSort = tempSort;
+                _selectedSource = tempSource;
+                Navigator.of(dialogContext).pop();
+                await _reloadOffers();
+              },
+              child: Text(strings.applyButton),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -124,6 +267,8 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
         message: strings.noBookDetailsMessage,
       );
     }
+
+    final visibleOffers = _visibleOffers;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,18 +315,45 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
         const SizedBox(height: 16),
         Text(strings.offersTitle, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _offerSearchController,
+                decoration: InputDecoration(
+                  hintText: strings.offersSearchHint,
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _offerQuery = value;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            IconButton.filledTonal(
+              onPressed: _showOfferFiltersPopup,
+              tooltip: strings.filterButton,
+              icon: const Icon(Icons.tune),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_offersLoading) const LinearProgressIndicator(),
         Expanded(
-          child: details.offers.isEmpty
+          child: visibleOffers.isEmpty
               ? EmptyState(
                   icon: Icons.shopping_bag_outlined,
                   title: strings.noOffersTitle,
                   message: strings.noOffersMessage,
                 )
               : ListView.separated(
-                  itemCount: details.offers.length,
+                  itemCount: visibleOffers.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
-                    final offer = details.offers[index];
+                    final offer = visibleOffers[index];
                     final priceOriginal = '${offer.originalPrice.amount.toStringAsFixed(2)} ${offer.originalPrice.currency}';
                     final priceConverted = '${offer.convertedPrice.amount.toStringAsFixed(2)} ${offer.convertedPrice.currency}';
                     return Card(
