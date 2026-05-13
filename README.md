@@ -211,8 +211,114 @@ Projekt obejmuje między innymi:
 - ustawienia aplikacji
 - komunikację z własnym backendem REST
 
-## Uwagi końcowe
+## Problem z certyfikatami
 
-Backend musi być uruchomiony przed frontendem.
-Frontend i backend muszą używać zgodnego adresu połączenia.
-W przypadku emulatora Android należy używać `http://10.0.2.2:8080`.
+Jeżeli backend nie może pobrać kursów z np. NBP i w logach pojawia się błąd podobny do:
+
+```text
+PKIX path building failed
+unable to find valid certification path to requested target
+SSLHandshakeException
+```
+
+to oznacza, że Java uruchamiająca backend nie ufa certyfikatowi używanemu między innymi przez `https://api.nbp.pl`.
+
+W tej sytuacji nie trzeba generować własnych certyfikatów. Wystarczy dodać odpowiednie certyfikaty Certum do truststore Javy.
+
+### Objawy
+
+Backend próbuje wykonać request:
+
+```text
+GET https://api.nbp.pl/api/exchangerates/tables/A?format=json
+```
+
+ale połączenie kończy się błędem TLS jeszcze przed odebraniem odpowiedzi HTTP.
+
+### Przyczyna
+
+Z logów handshake wynika, że serwer NBP odsyła łańcuch certyfikatów oparty o:
+
+- `CN=*.nbp.pl`
+- `CN=Certum OV TLS G2 R39 CA`
+- `CN=Certum Trusted Root CA`
+
+Jeżeli Java nie ma zaufania do tego root/intermediate, pojawia się błąd `PKIX path building failed`.
+
+### Instrukcja naprawy
+
+#### 1. Pobranie certyfikatów
+
+Uruchom PowerShell i wykonaj:
+
+```powershell
+New-Item -ItemType Directory -Force C:\temp\certum | Out-Null
+
+Invoke-WebRequest -Uri "http://subca.repository.certum.pl/ctrca.cer" -OutFile "C:\temp\certum\certum-root.cer"
+Invoke-WebRequest -Uri "http://certumovtlsg2r39ca.repository.certum.pl/certumovtlsg2r39ca.cer" -OutFile "C:\temp\certum\certum-r39-intermediate.cer"
+```
+
+Po wykonaniu tych poleceń powinny istnieć pliki:
+
+- `C:\temp\certum\certum-root.cer`
+- `C:\temp\certum\certum-r39-intermediate.cer`
+
+---
+
+#### 2. Import certyfikatów do Javy używanej przez backend
+
+Backend uruchamiany jest z:
+
+```text
+C:\Program Files\Java\jdk-24\bin\java.exe
+```
+
+więc należy dodać certyfikaty do truststore tej właśnie Javy:
+
+```text
+C:\Program Files\Java\jdk-24\lib\security\cacerts
+```
+
+Uruchom terminal **jako administrator** i wykonaj:
+
+```powershell
+& "C:\Program Files\Java\jdk-24\bin\keytool.exe" -importcert -noprompt -alias certum-trusted-root-ca -file "C:\temp\certum\certum-root.cer" -keystore "C:\Program Files\Java\jdk-24\lib\security\cacerts" -storepass changeit
+
+& "C:\Program Files\Java\jdk-24\bin\keytool.exe" -importcert -noprompt -alias certum-ov-tls-g2-r39-ca -file "C:\temp\certum\certum-r39-intermediate.cer" -keystore "C:\Program Files\Java\jdk-24\lib\security\cacerts" -storepass changeit
+```
+
+---
+
+#### 3. Sprawdzenie, czy import się powiódł
+
+Wykonaj:
+
+```powershell
+& "C:\Program Files\Java\jdk-24\bin\keytool.exe" -list -keystore "C:\Program Files\Java\jdk-24\lib\security\cacerts" -storepass changeit | findstr /I certum
+```
+
+Wynik powinien zawierać wpisy podobne do:
+
+- `certum-trusted-root-ca`
+- `certum-ov-tls-g2-r39-ca`
+
+---
+
+### Dodatkowa uwaga
+
+Fallback lokalny można zostawić w projekcie jako zabezpieczenie na wypadek:
+- chwilowego braku dostępu do NBP,
+- problemów sieciowych,
+- niedostępności zewnętrznego API.
+
+Nie zastępuje on jednak poprawnej konfiguracji certyfikatów, jeśli projekt ma pobierać kursy z NBP na żywo.
+
+---
+
+### Szybka lista kroków
+
+1. Pobierz certyfikaty Certum.
+2. Zaimportuj je do `cacerts` w `jdk-24`.
+3. Sprawdź, czy aliasy są widoczne.
+4. Usuń zbędne VM options TLS.
+5. Uruchom backend ponownie.

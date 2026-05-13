@@ -1,0 +1,411 @@
+{
+  "info": {
+    "name": "PNPiOS_26 Backend API",
+    "_postman_id": "8c5f0f0c-7a9f-4d7d-9c9a-2b3f0e8d4a01",
+    "description": "Kolekcja endpointów backendu projektu PNPiOS_26 do testowania w Postmanie.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "bookId",
+      "value": "book_2"
+    },
+    {
+      "key": "authorId",
+      "value": "author_2"
+    },
+    {
+      "key": "currency",
+      "value": "PLN"
+    },
+    {
+      "key": "queryBook",
+      "value": "harry potter"
+    },
+    {
+      "key": "queryAuthor",
+      "value": "rowling"
+    },
+    {
+      "key": "offerSort",
+      "value": "PRICE_ASC"
+    },
+    {
+      "key": "offerSource",
+      "value": "Books Online"
+    },
+    {
+      "key": "baseCurrency",
+      "value": "PLN"
+    }
+  ],
+  "item": [
+    {
+      "name": "Books",
+      "item": [
+        {
+          "name": "Search books",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/books/search?q={{queryBook}}&page=0&size=10&currency={{currency}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{queryBook}}"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                },
+                {
+                  "key": "currency",
+                  "value": "{{currency}}"
+                }
+              ]
+            },
+            "description": "Wyszukiwanie książek po tytule, autorze lub ISBN."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response is JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Book details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/books/{{bookId}}?currency={{currency}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{bookId}}"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "{{currency}}"
+                }
+              ]
+            },
+            "description": "Szczegóły wybranej książki."
+          }
+        },
+        {
+          "name": "Book offers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/books/{{bookId}}/offers?currency={{currency}}&sort={{offerSort}}&source={{offerSource}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{bookId}}",
+                "offers"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "{{currency}}"
+                },
+                {
+                  "key": "sort",
+                  "value": "{{offerSort}}"
+                },
+                {
+                  "key": "source",
+                  "value": "{{offerSource}}"
+                }
+              ]
+            },
+            "description": "Lista ofert zakupu dla wskazanej książki. Aby przetestować bez filtra źródła, usuń query param source."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authors",
+      "item": [
+        {
+          "name": "Search authors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authors/search?q={{queryAuthor}}&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "authors",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{queryAuthor}}"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Wyszukiwanie autorów."
+          }
+        },
+        {
+          "name": "Author details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authors/{{authorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "authors",
+                "{{authorId}}"
+              ]
+            },
+            "description": "Szczegóły wybranego autora."
+          }
+        },
+        {
+          "name": "Author books",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authors/{{authorId}}/books?page=0&size=10&currency={{currency}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "authors",
+                "{{authorId}}",
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                },
+                {
+                  "key": "currency",
+                  "value": "{{currency}}"
+                }
+              ]
+            },
+            "description": "Lista książek autora."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Currencies",
+      "item": [
+        {
+          "name": "Currencies list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/currencies?base={{baseCurrency}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "currencies"
+              ],
+              "query": [
+                {
+                  "key": "base",
+                  "value": "{{baseCurrency}}"
+                }
+              ]
+            },
+            "description": "Lista walut względem waluty bazowej."
+          }
+        },
+        {
+          "name": "Currency rates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/currencies/rates?base={{baseCurrency}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "currencies",
+                "rates"
+              ],
+              "query": [
+                {
+                  "key": "base",
+                  "value": "{{baseCurrency}}"
+                }
+              ]
+            },
+            "description": "Najważniejszy endpoint do testowania pobierania kursów walut przez backend."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Has base field', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('base');",
+                  "});",
+                  "pm.test('Has items array', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.items).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Currency convert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 12.99,\n  \"from\": \"USD\",\n  \"to\": \"PLN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/currencies/convert",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "currencies",
+                "convert"
+              ]
+            },
+            "description": "Przeliczenie pojedynczej kwoty między walutami."
+          }
+        }
+      ]
+    }
+  ]
+}
