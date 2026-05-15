@@ -35,7 +35,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
   AppSection _selectedSection = AppSection.books;
   String _selectedCurrency = 'PLN';
   String _language = 'pl';
-  AppStrings? _strings;
   double _textScale = 1.0;
   bool _highContrast = false;
 
@@ -54,7 +53,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   Future<void> _bootstrap() async {
     final stored = await _localStorageService.loadState();
-    final strings = await AppStrings.load(stored.language);
     if (!mounted) return;
 
     setState(() {
@@ -62,7 +60,6 @@ class _BookFinderAppState extends State<BookFinderApp> {
       _language = stored.language;
       _textScale = stored.textScale;
       _highContrast = stored.highContrast;
-      _strings = strings;
     });
 
     await _refreshSavedItems(
@@ -260,6 +257,18 @@ class _BookFinderAppState extends State<BookFinderApp> {
     );
   }
 
+
+  AuthorSearchItem _mapAuthorShortToSearchItem(AuthorShort author) {
+    return AuthorSearchItem(
+      id: author.id,
+      name: author.name,
+      birthYear: null,
+      deathYear: null,
+      photoUrl: null,
+      booksCount: 0,
+    );
+  }
+
   Future<void> _setSelectedCurrency(String currency) async {
     setState(() {
       _selectedCurrency = currency;
@@ -294,10 +303,22 @@ class _BookFinderAppState extends State<BookFinderApp> {
     if (dialogContext == null) return;
     await showDialog<void>(
       context: dialogContext,
+      useRootNavigator: true,
       builder: (context) => BookDetailsDialog(
         apiService: _apiService,
         bookId: bookId,
         currency: _selectedCurrency,
+        isSavedBook: _savedBooks.containsKey(bookId),
+        savedAuthorIds: _savedAuthors.keys.toSet(),
+        onToggleSavedBook: (item) {
+          _toggleSavedBook(item);
+        },
+        onToggleSavedAuthor: (item) {
+          _toggleSavedAuthor(item);
+        },
+        onOpenAuthor: (authorId) {
+          _openAuthorDialog(authorId);
+        },
       ),
     );
   }
@@ -307,13 +328,22 @@ class _BookFinderAppState extends State<BookFinderApp> {
     if (dialogContext == null) return;
     await showDialog<void>(
       context: dialogContext,
+      useRootNavigator: true,
       builder: (context) => AuthorDetailsDialog(
         apiService: _apiService,
         authorId: authorId,
         currency: _selectedCurrency,
+        isSavedAuthor: _savedAuthors.containsKey(authorId),
+        savedBookIds: _savedBooks.keys.toSet(),
+        onToggleSavedAuthor: (item) {
+          _toggleSavedAuthor(item);
+        },
+        onToggleSavedBook: (item) {
+          _toggleSavedBook(item);
+        },
         onOpenBook: (bookId) {
-            _openBookDialog(bookId);
-          },
+          _openBookDialog(bookId);
+        },
       ),
     );
   }
@@ -394,17 +424,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   @override
   Widget build(BuildContext context) {
-    if (_strings == null) {
-      return const MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      );
-    }
-
-    final strings = _strings!;
+    final strings = AppStrings(_language);
 
     return MaterialApp(
       navigatorKey: _navigatorKey,
