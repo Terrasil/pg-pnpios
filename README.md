@@ -322,3 +322,195 @@ Nie zastępuje on jednak poprawnej konfiguracji certyfikatów, jeśli projekt ma
 3. Sprawdź, czy aliasy są widoczne.
 4. Usuń zbędne VM options TLS.
 5. Uruchom backend ponownie.
+
+# Uruchamianie testów w projekcie PNPiOS 26
+
+Ten plik opisuje uruchamianie testów dodanych do aktualnej wersji projektu. W projekcie wymagane są dwa typy testów:
+
+- testy jednostkowe backendu,
+- testy jednostkowe oraz UI/widget tests frontendu.
+
+## 1. Testy backendu
+
+Testy backendu znajdują się w katalogu:
+
+```text
+backend/pnpios/src/test/java
+```
+
+Dodane testy powinny znajdować się między innymi w:
+
+```text
+src/test/java/pl/pg/pnpios/services/CurrencyServiceTest.java
+src/test/java/pl/pg/pnpios/services/OfferAggregationServiceTest.java
+```
+
+### Uruchomienie wszystkich testów backendu
+
+Wejdź do katalogu backendu, czyli tam, gdzie znajduje się plik `pom.xml`:
+
+```bash
+cd backend/pnpios
+mvn test
+```
+
+Jeżeli projekt używa Maven Wrappera, można użyć:
+
+Windows:
+
+```bash
+cd backend/pnpios
+.\mvnw test
+```
+
+Linux/macOS:
+
+```bash
+cd backend/pnpios
+./mvnw test
+```
+
+### Uruchomienie pojedynczej klasy testowej backendu
+
+```bash
+mvn -Dtest=CurrencyServiceTest test
+```
+
+```bash
+mvn -Dtest=OfferAggregationServiceTest test
+```
+
+### Wyniki testów backendu
+
+Po uruchomieniu testów Maven zapisuje raporty w katalogu:
+
+```text
+target/surefire-reports
+```
+
+Jeżeli testy nie startują, należy sprawdzić, czy w `pom.xml` znajduje się zależność testowa Spring Boot:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+## 2. Testy frontendu
+
+Testy frontendu znajdują się w katalogu:
+
+```text
+frontend/test
+```
+
+Dodane testy powinny znajdować się między innymi w:
+
+```text
+test/models/app_models_test.dart
+test/services/local_storage_service_test.dart
+test/screens/books_screen_test.dart
+```
+
+W projekcie frontendu są używane dwa typy testów:
+
+- testy jednostkowe modeli i usług,
+- testy UI/widget tests dla ekranu wyszukiwania książek.
+
+### Pobranie zależności frontendu
+
+Wejdź do katalogu frontendu, czyli tam, gdzie znajduje się plik `pubspec.yaml`:
+
+```bash
+cd frontend
+flutter pub get
+```
+
+Jeżeli projekt Flutter znajduje się w innym podkatalogu, trzeba wejść dokładnie do tego katalogu, który zawiera `pubspec.yaml`.
+
+### Uruchomienie wszystkich testów frontendu
+
+```bash
+flutter test
+```
+
+### Uruchomienie pojedynczych testów frontendu
+
+Testy modeli:
+
+```bash
+flutter test test/models/app_models_test.dart
+```
+
+Testy lokalnego zapisu, historii wyszukiwania i ustawień:
+
+```bash
+flutter test test/services/local_storage_service_test.dart
+```
+
+Test UI ekranu książek:
+
+```bash
+flutter test test/screens/books_screen_test.dart
+```
+
+### Raport pokrycia testów frontendu
+
+Opcjonalnie można uruchomić testy z raportem pokrycia:
+
+```bash
+flutter test --coverage
+```
+
+Raport zostanie zapisany w:
+
+```text
+coverage/lcov.info
+```
+
+## 3. Co sprawdzają testy
+
+### Backend
+
+Testy backendu sprawdzają między innymi:
+
+- przeliczanie walut na podstawie kursów zwracanych przez backend,
+- obsługę cache kursów walut,
+- sortowanie ofert po cenie,
+- filtrowanie ofert po źródle,
+- deduplikację ofert,
+- wyliczanie zakresu cen.
+
+### Frontend
+
+Testy frontendu sprawdzają między innymi:
+
+- poprawne mapowanie odpowiedzi JSON na modele aplikacji,
+- zapis i odczyt lokalnych ustawień,
+- historię wyszukiwania,
+- limit historii wyszukiwania,
+- brak osobnego przycisku „Szukaj” przy pasku wyszukiwania,
+- obecność przycisków historii i filtrów,
+- wyszukiwanie po zatwierdzeniu pola tekstowego,
+- podstawowe działanie filtrowania wyników.
+
+## 4. Kolejność sprawdzania przed oddaniem projektu
+
+Najbezpieczniej uruchomić komendy w tej kolejności:
+
+```bash
+cd backend/pnpios
+mvn test
+```
+
+Następnie:
+
+```bash
+cd frontend
+flutter pub get
+flutter test
+```
+
+Jeżeli oba polecenia kończą się bez błędów, projekt spełnia wymaganie dodania testów jednostkowych oraz testów UI/widget tests.

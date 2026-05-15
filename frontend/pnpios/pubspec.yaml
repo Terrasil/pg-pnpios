@@ -21,3 +21,6 @@ flutter:
   assets:
     - assets/i18n/pl.json
     - assets/i18n/en.json
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

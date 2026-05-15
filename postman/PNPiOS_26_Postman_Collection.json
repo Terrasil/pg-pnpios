@@ -1,51 +1,14 @@
 {
   "info": {
-    "name": "PNPiOS_26 Backend API",
-    "_postman_id": "8c5f0f0c-7a9f-4d7d-9c9a-2b3f0e8d4a01",
-    "description": "Kolekcja endpointów backendu projektu PNPiOS_26 do testowania w Postmanie.",
+    "_postman_id": "86456b83-7844-457c-a4f0-41c5d4ef0c80",
+    "name": "PNPiOS 26 API",
+    "description": "Zaktualizowana kolekcja Postman dla aktualnego backendu projektu PNPiOS 26. Obejmuje endpointy książek, autorów oraz walut z `/api/v1`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "bookId",
-      "value": "book_2"
-    },
-    {
-      "key": "authorId",
-      "value": "author_2"
-    },
-    {
-      "key": "currency",
-      "value": "PLN"
-    },
-    {
-      "key": "queryBook",
-      "value": "harry potter"
-    },
-    {
-      "key": "queryAuthor",
-      "value": "rowling"
-    },
-    {
-      "key": "offerSort",
-      "value": "PRICE_ASC"
-    },
-    {
-      "key": "offerSource",
-      "value": "Books Online"
-    },
-    {
-      "key": "baseCurrency",
-      "value": "PLN"
-    }
-  ],
   "item": [
     {
       "name": "Books",
+      "description": "Endpointy związane z wyszukiwaniem książek, szczegółami książki i ofertami cenowymi.",
       "item": [
         {
           "name": "Search books",
@@ -58,9 +21,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/books/search?q={{queryBook}}&page=0&size=10&currency={{currency}}",
+              "raw": "{{base_url}}/api/v1/books/search?q={{book_query}}&page={{page}}&size={{size}}&currency={{currency}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -71,23 +34,27 @@
               "query": [
                 {
                   "key": "q",
-                  "value": "{{queryBook}}"
+                  "value": "{{book_query}}",
+                  "description": "Fraza wyszukiwania, np. hobbit"
                 },
                 {
                   "key": "page",
-                  "value": "0"
+                  "value": "{{page}}",
+                  "description": "Numer strony, liczony od 0"
                 },
                 {
                   "key": "size",
-                  "value": "10"
+                  "value": "{{size}}",
+                  "description": "Liczba elementów na stronę"
                 },
                 {
                   "key": "currency",
-                  "value": "{{currency}}"
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa cen, np. PLN, USD, EUR"
                 }
               ]
             },
-            "description": "Wyszukiwanie książek po tytule, autorze lub ISBN."
+            "description": "Wyszukuje książki po frazie. Odpowiedź zawiera listę `BookSearchItemDTO`, liczbę ofert oraz zakres cen w wybranej walucie."
           },
           "event": [
             {
@@ -95,15 +62,30 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Response is JSON', function () { pm.response.to.be.json; });"
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Search books response has items array', function () {",
+                  "    pm.expect(json).to.have.property('items');",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});",
+                  "if (json.items && json.items.length > 0 && json.items[0].id) {",
+                  "    pm.environment.set('bookId', json.items[0].id);",
+                  "}"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Book details",
+          "name": "Get book details",
           "request": {
             "method": "GET",
             "header": [
@@ -113,9 +95,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/books/{{bookId}}?currency={{currency}}",
+              "raw": "{{base_url}}/api/v1/books/{{bookId}}?currency={{currency}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -126,15 +108,43 @@
               "query": [
                 {
                   "key": "currency",
-                  "value": "{{currency}}"
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa ofert w szczegółach książki"
                 }
               ]
             },
-            "description": "Szczegóły wybranej książki."
-          }
+            "description": "Pobiera szczegóły książki, autorów, opis, dane wydania i listę potwierdzonych ofert z ceną."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Book details has id and title', function () {",
+                  "    pm.expect(json).to.have.property('id');",
+                  "    pm.expect(json).to.have.property('title');",
+                  "});",
+                  "if (json.authors && json.authors.length > 0 && json.authors[0].id) {",
+                  "    pm.environment.set('authorId', json.authors[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Book offers",
+          "name": "Get book offers",
           "request": {
             "method": "GET",
             "header": [
@@ -144,9 +154,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/books/{{bookId}}/offers?currency={{currency}}&sort={{offerSort}}&source={{offerSource}}",
+              "raw": "{{base_url}}/api/v1/books/{{bookId}}/offers?currency={{currency}}&sort={{sort}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -158,25 +168,122 @@
               "query": [
                 {
                   "key": "currency",
-                  "value": "{{currency}}"
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa cen"
                 },
                 {
                   "key": "sort",
-                  "value": "{{offerSort}}"
+                  "value": "{{sort}}",
+                  "description": "PRICE_ASC, PRICE_DESC albo SOURCE_ASC"
                 },
                 {
                   "key": "source",
-                  "value": "{{offerSource}}"
+                  "value": "{{source}}",
+                  "description": "Opcjonalny filtr źródła, np. AbeBooks",
+                  "disabled": true
                 }
               ]
             },
-            "description": "Lista ofert zakupu dla wskazanej książki. Aby przetestować bez filtra źródła, usuń query param source."
-          }
+            "description": "Pobiera potwierdzone oferty dla konkretnej książki. Parametr `source` jest opcjonalny i domyślnie wyłączony w tej prośbie."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Book offers response is array', function () {",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});",
+                  "if (json.length > 0 && json[0].source) {",
+                  "    pm.environment.set('source', json[0].source);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get book offers filtered by source",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/books/{{bookId}}/offers?currency={{currency}}&sort={{sort}}&source={{source}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{bookId}}",
+                "offers"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa cen"
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "description": "PRICE_ASC, PRICE_DESC albo SOURCE_ASC"
+                },
+                {
+                  "key": "source",
+                  "value": "{{source}}",
+                  "description": "Nazwa źródła, np. AbeBooks"
+                }
+              ]
+            },
+            "description": "Pobiera oferty dla książki przefiltrowane po źródle. Jeżeli nie chcesz filtrować, użyj requestu `Get book offers`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Filtered book offers response is array', function () {",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Authors",
+      "description": "Endpointy wyszukiwania autorów, szczegółów autora i książek danego autora.",
       "item": [
         {
           "name": "Search authors",
@@ -189,9 +296,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/authors/search?q={{queryAuthor}}&page=0&size=10",
+              "raw": "{{base_url}}/api/v1/authors/search?q={{author_query}}&page={{page}}&size={{size}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -202,23 +309,53 @@
               "query": [
                 {
                   "key": "q",
-                  "value": "{{queryAuthor}}"
+                  "value": "{{author_query}}",
+                  "description": "Fraza wyszukiwania autora, np. Tolkien"
                 },
                 {
                   "key": "page",
-                  "value": "0"
+                  "value": "{{page}}",
+                  "description": "Numer strony, liczony od 0"
                 },
                 {
                   "key": "size",
-                  "value": "10"
+                  "value": "{{size}}",
+                  "description": "Liczba elementów na stronę"
                 }
               ]
             },
-            "description": "Wyszukiwanie autorów."
-          }
+            "description": "Wyszukuje autorów po frazie. Odpowiedź zawiera listę `AuthorSearchItemDTO`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Search authors response has items array', function () {",
+                  "    pm.expect(json).to.have.property('items');",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});",
+                  "if (json.items && json.items.length > 0 && json.items[0].id) {",
+                  "    pm.environment.set('authorId', json.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Author details",
+          "name": "Get author details",
           "request": {
             "method": "GET",
             "header": [
@@ -228,22 +365,56 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/authors/{{authorId}}",
+              "raw": "{{base_url}}/api/v1/authors/{{authorId}}?currency={{currency}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
                 "v1",
                 "authors",
                 "{{authorId}}"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa cen książek autora"
+                }
               ]
             },
-            "description": "Szczegóły wybranego autora."
-          }
+            "description": "Pobiera szczegóły autora, biografię i listę książek z informacją o ofertach w wybranej walucie."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Author details has id and name', function () {",
+                  "    pm.expect(json).to.have.property('id');",
+                  "    pm.expect(json).to.have.property('name');",
+                  "});",
+                  "if (json.books && json.books.length > 0 && json.books[0].id) {",
+                  "    pm.environment.set('bookId', json.books[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Author books",
+          "name": "Get author books",
           "request": {
             "method": "GET",
             "header": [
@@ -253,9 +424,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/authors/{{authorId}}/books?page=0&size=10&currency={{currency}}",
+              "raw": "{{base_url}}/api/v1/authors/{{authorId}}/books?page={{page}}&size={{size}}&currency={{currency}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -267,28 +438,59 @@
               "query": [
                 {
                   "key": "page",
-                  "value": "0"
+                  "value": "{{page}}",
+                  "description": "Numer strony, liczony od 0"
                 },
                 {
                   "key": "size",
-                  "value": "10"
+                  "value": "{{size}}",
+                  "description": "Liczba elementów na stronę"
                 },
                 {
                   "key": "currency",
-                  "value": "{{currency}}"
+                  "value": "{{currency}}",
+                  "description": "Waluta docelowa cen"
                 }
               ]
             },
-            "description": "Lista książek autora."
-          }
+            "description": "Pobiera książki wybranego autora jako `BookSearchResponseDTO`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Author books response has items array', function () {",
+                  "    pm.expect(json).to.have.property('items');",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});",
+                  "if (json.items && json.items.length > 0 && json.items[0].id) {",
+                  "    pm.environment.set('bookId', json.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Currencies",
+      "description": "Endpointy walut oparte na danych kursowych backendu.",
       "item": [
         {
-          "name": "Currencies list",
+          "name": "Get currencies",
           "request": {
             "method": "GET",
             "header": [
@@ -298,9 +500,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/currencies?base={{baseCurrency}}",
+              "raw": "{{base_url}}/api/v1/currencies?base={{currency_base}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -310,15 +512,40 @@
               "query": [
                 {
                   "key": "base",
-                  "value": "{{baseCurrency}}"
+                  "value": "{{currency_base}}",
+                  "description": "Waluta bazowa, np. PLN, USD, EUR"
                 }
               ]
             },
-            "description": "Lista walut względem waluty bazowej."
-          }
+            "description": "Pobiera listę walut i kursów przeliczonych względem waluty bazowej."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Currencies response has items array', function () {",
+                  "    pm.expect(json).to.have.property('items');",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Currency rates",
+          "name": "Get rates",
           "request": {
             "method": "GET",
             "header": [
@@ -328,9 +555,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/currencies/rates?base={{baseCurrency}}",
+              "raw": "{{base_url}}/api/v1/currencies/rates?base={{currency_base}}",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -341,11 +568,12 @@
               "query": [
                 {
                   "key": "base",
-                  "value": "{{baseCurrency}}"
+                  "value": "{{currency_base}}",
+                  "description": "Waluta bazowa, np. PLN, USD, EUR"
                 }
               ]
             },
-            "description": "Najważniejszy endpoint do testowania pobierania kursów walut przez backend."
+            "description": "Pobiera aktualne kursy względem waluty bazowej. Endpoint zgodny z aktualnym `CurrencyController`."
           },
           "event": [
             {
@@ -353,14 +581,19 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Has base field', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json).to.have.property('base');",
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
                   "});",
-                  "pm.test('Has items array', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.items).to.be.an('array');",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Rates response has base and items', function () {",
+                  "    pm.expect(json).to.have.property('base');",
+                  "    pm.expect(json).to.have.property('items');",
                   "});"
                 ]
               }
@@ -368,7 +601,7 @@
           ]
         },
         {
-          "name": "Currency convert",
+          "name": "Convert currency",
           "request": {
             "method": "POST",
             "header": [
@@ -383,7 +616,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 12.99,\n  \"from\": \"USD\",\n  \"to\": \"PLN\"\n}",
+              "raw": "{\n  \"amount\": \"{{amount}}\",\n  \"from\": \"{{from_currency}}\",\n  \"to\": \"{{to_currency}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -391,9 +624,9 @@
               }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/currencies/convert",
+              "raw": "{{base_url}}/api/v1/currencies/convert",
               "host": [
-                "{{baseUrl}}"
+                "{{base_url}}"
               ],
               "path": [
                 "api",
@@ -402,10 +635,46 @@
                 "convert"
               ]
             },
-            "description": "Przeliczenie pojedynczej kwoty między walutami."
-          }
+            "description": "Przelicza kwotę między walutami na podstawie kursów backendu."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 2xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function () {",
+                  "    pm.response.to.have.header('Content-Type');",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Convert response has convertedAmount', function () {",
+                  "    pm.expect(json).to.have.property('convertedAmount');",
+                  "    pm.expect(json.convertedAmount).to.not.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Kolekcja używa zmiennych ze środowiska PNPiOS_26_Postman_Environment.json.",
+          "// Najpierw uruchom Search books albo Search authors, aby automatycznie ustawić bookId/authorId."
+        ]
+      }
     }
   ]
 }
