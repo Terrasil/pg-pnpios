@@ -52,9 +52,9 @@ class OfferItem {
   final String sourceType;
   final String offerUrl;
   final String availability;
-  final Money originalPrice;
-  final Money convertedPrice;
-  final double exchangeRate;
+  final Money? originalPrice;
+  final Money? convertedPrice;
+  final double? exchangeRate;
   final String lastUpdated;
 
   const OfferItem({
@@ -69,20 +69,20 @@ class OfferItem {
     required this.lastUpdated,
   });
 
+  bool get hasPrice => convertedPrice != null && convertedPrice!.amount > 0;
+
   factory OfferItem.fromJson(Map<String, dynamic> json) {
+    final originalJson = json['originalPrice'] as Map<String, dynamic>?;
+    final convertedJson = json['convertedPrice'] as Map<String, dynamic>?;
     return OfferItem(
       id: (json['id'] as String?) ?? '',
       source: (json['source'] as String?) ?? '',
       sourceType: (json['sourceType'] as String?) ?? '',
       offerUrl: (json['offerUrl'] as String?) ?? '',
       availability: (json['availability'] as String?) ?? 'UNKNOWN',
-      originalPrice: Money.fromJson(
-        (json['originalPrice'] as Map<String, dynamic>?) ?? const {},
-      ),
-      convertedPrice: Money.fromJson(
-        (json['convertedPrice'] as Map<String, dynamic>?) ?? const {},
-      ),
-      exchangeRate: (json['exchangeRate'] as num?)?.toDouble() ?? 0,
+      originalPrice: originalJson == null ? null : Money.fromJson(originalJson),
+      convertedPrice: convertedJson == null ? null : Money.fromJson(convertedJson),
+      exchangeRate: (json['exchangeRate'] as num?)?.toDouble(),
       lastUpdated: (json['lastUpdated'] as String?) ?? '',
     );
   }

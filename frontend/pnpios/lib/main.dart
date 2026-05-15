@@ -139,7 +139,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
   Future<void> _refreshSingleSavedAuthor(String authorId) async {
     try {
-      final details = await _apiService.getAuthorDetails(authorId: authorId);
+      final details = await _apiService.getAuthorDetails(authorId: authorId, currency: _selectedCurrency);
       if (!mounted) return;
       setState(() {
         _savedAuthors[authorId] = _mapAuthorDetailsToSearchItem(details);
@@ -191,7 +191,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
 
     for (final id in targetAuthorIds) {
       try {
-        final details = await _apiService.getAuthorDetails(authorId: id);
+        final details = await _apiService.getAuthorDetails(authorId: id, currency: _selectedCurrency);
         updatedAuthors[id] = _mapAuthorDetailsToSearchItem(details);
       } catch (e) {
         error ??= e.toString();
@@ -217,17 +217,18 @@ class _BookFinderAppState extends State<BookFinderApp> {
   }
 
   PriceRange? _buildPriceRange(List<OfferItem> offers) {
-    if (offers.isEmpty) {
+    final pricedOffers = offers.where((offer) => offer.hasPrice && offer.convertedPrice != null).toList();
+    if (pricedOffers.isEmpty) {
       return null;
     }
 
-    final amounts = offers.map((offer) => offer.convertedPrice.amount).toList();
+    final amounts = pricedOffers.map((offer) => offer.convertedPrice!.amount).toList();
     final minAmount = amounts.reduce(math.min);
     final maxAmount = amounts.reduce(math.max);
     return PriceRange(
       min: minAmount,
       max: maxAmount,
-      currency: offers.first.convertedPrice.currency,
+      currency: pricedOffers.first.convertedPrice!.currency,
     );
   }
 
@@ -241,7 +242,7 @@ class _BookFinderAppState extends State<BookFinderApp> {
       language: details.language,
       genre: details.genres.isEmpty ? null : details.genres.first,
       isbn13: details.isbn13,
-      offersCount: details.offers.length,
+      offersCount: details.offers.where((offer) => offer.hasPrice).length,
       priceRange: _buildPriceRange(details.offers),
     );
   }

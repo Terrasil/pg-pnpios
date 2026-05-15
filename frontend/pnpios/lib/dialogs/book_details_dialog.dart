@@ -122,7 +122,7 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
         language: details.language,
         genre: details.genres.isEmpty ? null : details.genres.first,
         isbn13: details.isbn13,
-        offersCount: details.offers.length,
+        offersCount: details.offers.where((offer) => offer.hasPrice).length,
         priceRange: _buildPriceRange(details.offers),
       ),
     );
@@ -146,23 +146,25 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
   }
 
   PriceRange? _buildPriceRange(List<OfferItem> offers) {
-    if (offers.isEmpty) {
+    final pricedOffers = offers.where((offer) => offer.hasPrice && offer.convertedPrice != null).toList();
+    if (pricedOffers.isEmpty) {
       return null;
     }
-    final amounts = offers.map((offer) => offer.convertedPrice.amount).toList()..sort();
+    final amounts = pricedOffers.map((offer) => offer.convertedPrice!.amount).toList()..sort();
     return PriceRange(
       min: amounts.first,
       max: amounts.last,
-      currency: offers.first.convertedPrice.currency,
+      currency: pricedOffers.first.convertedPrice!.currency,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.86;
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 620),
+        constraints: BoxConstraints(maxWidth: 760, maxHeight: maxHeight),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: _buildBody(context),
@@ -191,126 +193,83 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final pricedOffers = details.offers.where((offer) => offer.hasPrice && offer.convertedPrice != null).toList();
+
+    return Scrollbar(
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(right: 8),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 90,
-              height: 130,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.menu_book_outlined, size: 42),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(details.title, style: Theme.of(context).textTheme.headlineSmall),
-                  if ((details.subtitle ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(details.subtitle!),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(strings.languageValue(strings.valueOrDash(details.language))),
-                  Text(strings.publisherValue(strings.valueOrDash(details.publisher))),
-                  Text(strings.yearValue(details.publishedYear?.toString() ?? '-')),
-                  if ((details.isbn13 ?? '').isNotEmpty) Text('ISBN-13: ${details.isbn13}'),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: () => _toggleSavedBook(details),
-              tooltip: _isBookSaved() ? strings.removeFromFavoritesTooltip : strings.saveToFavoritesTooltip,
-              icon: Icon(_isBookSaved() ? Icons.bookmark : Icons.bookmark_border),
-            ),
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              tooltip: strings.closeButton,
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(strings.authorsSectionTitle, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (details.authors.isEmpty)
-          Text(strings.authorLabel('-'))
-        else
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              children: details.authors.map((author) {
-                final isSaved = _isAuthorSaved(author.id);
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(author.name),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: () => _toggleSavedAuthor(author),
-                          tooltip: isSaved ? strings.removeFromFavoritesTooltip : strings.saveToFavoritesTooltip,
-                          icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
-                        ),
-                        IconButton(
-                          onPressed: () => widget.onOpenAuthor(author.id),
-                          tooltip: strings.openAuthorDetailsTooltip,
-                          icon: const Icon(Icons.open_in_new),
-                        ),
-                      ],
-                    ),
-                    onTap: () => widget.onOpenAuthor(author.id),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        Text(strings.descriptionSectionTitle, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Container(
-          height: 120,
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: Scrollbar(
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              child: Text(details.description?.trim().isNotEmpty == true ? details.description! : strings.missingBookDescription),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(strings.offersTitle, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Expanded(
-          child: details.offers.isEmpty
-              ? EmptyState(
-                  icon: Icons.shopping_bag_outlined,
-                  title: strings.noOffersTitle,
-                  message: strings.noOffersMessage,
-                )
-              : ListView.separated(
-                  itemCount: details.offers.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final offer = details.offers[index];
-                    final priceOriginal = '${offer.originalPrice.amount.toStringAsFixed(2)} ${offer.originalPrice.currency}';
-                    final priceConverted = '${offer.convertedPrice.amount.toStringAsFixed(2)} ${offer.convertedPrice.currency}';
+            _buildHeader(context, strings, details),
+            const SizedBox(height: 18),
+            if (details.authors.isNotEmpty) ...[
+              Text(strings.authorsSectionTitle, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 76),
+                child: Column(
+                  children: details.authors.map((author) {
+                    final isSaved = _isAuthorSaved(author.id);
                     return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.person_outline),
+                        title: Text(author.name),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => _toggleSavedAuthor(author),
+                              tooltip: isSaved ? strings.removeFromFavoritesTooltip : strings.saveToFavoritesTooltip,
+                              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
+                            ),
+                            IconButton(
+                              onPressed: () => widget.onOpenAuthor(author.id),
+                              tooltip: strings.openAuthorDetailsTooltip,
+                              icon: const Icon(Icons.open_in_new),
+                            ),
+                          ],
+                        ),
+                        onTap: () => widget.onOpenAuthor(author.id),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if ((details.description ?? '').trim().isNotEmpty) ...[
+              Text(strings.descriptionSectionTitle, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _buildDescriptionBox(context, details.description!.trim()),
+              const SizedBox(height: 16),
+            ],
+            Text(strings.offersTitle, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            if (pricedOffers.isEmpty)
+              EmptyState(
+                icon: Icons.shopping_bag_outlined,
+                title: strings.noOffersTitle,
+                message: strings.noOffersMessage,
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 160),
+                child: Column(
+                  children: pricedOffers.map((offer) {
+                    final original = offer.originalPrice;
+                    final converted = offer.convertedPrice;
+                    final priceOriginal = original == null || original.amount <= 0
+                        ? '-'
+                        : '${original.amount.toStringAsFixed(2)} ${original.currency}';
+                    final priceConverted = converted == null || converted.amount <= 0
+                        ? '-'
+                        : '${converted.amount.toStringAsFixed(2)} ${converted.currency}';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         title: Text(offer.source),
                         subtitle: Text(
@@ -336,10 +295,76 @@ class _BookDetailsDialogState extends State<BookDetailsDialog> {
                         ),
                       ),
                     );
-                  },
+                  }).toList(),
                 ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, AppStrings strings, BookDetails details) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 90,
+          height: 130,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.menu_book_outlined, size: 42),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(details.title, style: Theme.of(context).textTheme.headlineSmall),
+              if ((details.subtitle ?? '').isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(details.subtitle!),
+              ],
+              const SizedBox(height: 8),
+              Text(strings.languageValue(strings.valueOrDash(details.language))),
+              Text(strings.publisherValue(strings.valueOrDash(details.publisher))),
+              Text(strings.yearValue(details.publishedYear?.toString() ?? '-')),
+              if ((details.isbn13 ?? '').isNotEmpty) Text('ISBN-13: ${details.isbn13}'),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: () => _toggleSavedBook(details),
+          tooltip: _isBookSaved() ? strings.removeFromFavoritesTooltip : strings.saveToFavoritesTooltip,
+          icon: Icon(_isBookSaved() ? Icons.bookmark : Icons.bookmark_border),
+        ),
+        IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: strings.closeButton,
+          icon: const Icon(Icons.close),
         ),
       ],
+    );
+  }
+
+  Widget _buildDescriptionBox(BuildContext context, String description) {
+    return Container(
+      height: 160,
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          child: Text(description),
+        ),
+      ),
     );
   }
 }

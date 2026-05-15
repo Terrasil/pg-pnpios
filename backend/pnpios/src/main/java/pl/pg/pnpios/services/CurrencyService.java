@@ -27,6 +27,7 @@ public class CurrencyService {
     private final CurrencyRatesClient currencyRatesClient;
     private final CurrencyRatesCacheService cacheService;
     private final boolean remoteEnabled;
+    private volatile RateTable cachedRateTable;
 
     public CurrencyService(
         CurrencyRatesClient currencyRatesClient,
@@ -67,13 +68,21 @@ public class CurrencyService {
     }
 
     private RateTable loadRateTable() {
+        RateTable alreadyLoaded = cachedRateTable;
+        if (alreadyLoaded != null) {
+            return alreadyLoaded;
+        }
+
+        RateTable loaded;
         if (remoteEnabled) {
             try {
                 List<NbpExchangeRatesTableResponse> response = currencyRatesClient.getTableA("json");
                 if (response != null && !response.isEmpty() && response.get(0) != null) {
                     NbpExchangeRatesTableResponse table = response.get(0);
                     cacheService.save(table);
-                    return mapNbpTable(table);
+                    loaded = mapNbpTable(table);
+                    cachedRateTable = loaded;
+                    return loaded;
                 }
             } catch (Exception ignored) {
                 // Fallback to cache or local rates below.
@@ -82,10 +91,14 @@ public class CurrencyService {
 
         Optional<NbpExchangeRatesTableResponse> cached = cacheService.load();
         if (cached.isPresent()) {
-            return mapNbpTable(cached.get());
+            loaded = mapNbpTable(cached.get());
+            cachedRateTable = loaded;
+            return loaded;
         }
 
-        return fallbackRateTable();
+        loaded = fallbackRateTable();
+        cachedRateTable = loaded;
+        return loaded;
     }
 
     private RateTable mapNbpTable(NbpExchangeRatesTableResponse response) {

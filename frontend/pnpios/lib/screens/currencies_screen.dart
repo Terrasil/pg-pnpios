@@ -165,8 +165,8 @@ class _CurrenciesScreenState extends State<CurrenciesScreen> {
             ),
             title: Text(item.code.isEmpty ? strings.missingCode : item.code),
             subtitle: Text(
-              '$displayName'
-              '${strings.rateLabel}: ${item.rate.toStringAsFixed(4)}   '
+              '$displayName\n'
+              '${strings.rateLabel}: ${item.rate.toStringAsFixed(4)}\n'
               '${strings.dateLabel}: ${item.rateDate.isEmpty ? '-' : item.rateDate}',
             ),
             isThreeLine: true,

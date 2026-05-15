@@ -69,7 +69,7 @@ public class AuthorService {
         return new AuthorSearchResponseDTO(q, page, size, total, calculateTotalPages(total, size), items);
     }
 
-    public AuthorDetailsDTO getAuthorDetails(String authorId) {
+    public AuthorDetailsDTO getAuthorDetails(String authorId, String currency) {
         String normalizedAuthorId = normalizeAuthorId(authorId);
         JsonNode author = getJson("https://openlibrary.org/authors/" + normalizedAuthorId + ".json");
         String name = blankToDefault(stringValue(author == null ? null : author.get("name")), normalizedAuthorId);
@@ -77,7 +77,7 @@ public class AuthorService {
         Integer birthYear = parseYear(stringValue(author == null ? null : author.get("birth_date")));
         Integer deathYear = parseYear(stringValue(author == null ? null : author.get("death_date")));
         String photoUrl = authorPhotoUrl(normalizedAuthorId);
-        List<BookSearchItemDTO> books = getAuthorBooks(normalizedAuthorId, 0, 20, "PLN").items();
+        List<BookSearchItemDTO> books = getAuthorBooks(normalizedAuthorId, 0, 20, currency).items();
 
         return new AuthorDetailsDTO(
             normalizedAuthorId,

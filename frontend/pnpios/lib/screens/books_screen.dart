@@ -123,6 +123,12 @@ class _BooksScreenState extends State<BooksScreen> {
     });
   }
 
+  bool get _hasActiveFilters {
+    return _authorFilterController.text.trim().isNotEmpty ||
+        _genreFilterController.text.trim().isNotEmpty ||
+        _onlyWithOffers;
+  }
+
   List<BookListItem> get _filteredItems {
     final authorFilter = _authorFilterController.text.trim().toLowerCase();
     final genreFilter = _genreFilterController.text.trim().toLowerCase();
@@ -135,6 +141,142 @@ class _BooksScreenState extends State<BooksScreen> {
       final matchesOffers = !_onlyWithOffers || (item.offersCount > 0 && item.priceRange != null);
       return matchesAuthor && matchesGenre && matchesOffers;
     }).toList();
+  }
+
+  Future<void> _showHistorySheet() async {
+    final strings = context.strings;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(strings.searchHistoryTitle, style: Theme.of(sheetContext).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                if (_searchHistory.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(strings.noSearchHistory),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _searchHistory.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final query = _searchHistory[index];
+                        return ListTile(
+                          leading: const Icon(Icons.history),
+                          title: Text(query),
+                          onTap: _loading
+                              ? null
+                              : () {
+                                  Navigator.of(sheetContext).pop();
+                                  _search(query);
+                                },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showFiltersSheet() async {
+    final strings = context.strings;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, sheetSetState) {
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  16 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(strings.filtersTitle, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _authorFilterController,
+                      decoration: InputDecoration(
+                        labelText: strings.authorFilterLabel,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) {
+                        setState(() {});
+                        sheetSetState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _genreFilterController,
+                      decoration: InputDecoration(
+                        labelText: strings.genreFilterLabel,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) {
+                        setState(() {});
+                        sheetSetState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    CheckboxListTile(
+                      value: _onlyWithOffers,
+                      onChanged: (value) {
+                        setState(() {
+                          _onlyWithOffers = value ?? false;
+                        });
+                        sheetSetState(() {});
+                      },
+                      title: Text(strings.onlyWithOffersFilter),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            _clearFilters();
+                            sheetSetState(() {});
+                          },
+                          icon: const Icon(Icons.clear),
+                          label: Text(strings.clearFiltersButton),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: Text(strings.closeButton),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -161,134 +303,32 @@ class _BooksScreenState extends State<BooksScreen> {
                       prefixIcon: const Icon(Icons.search),
                       border: const OutlineInputBorder(),
                     ),
+                    textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _search(),
                   ),
                 ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _loading ? null : _search,
-                  icon: _loading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.search),
-                  label: Text(strings.searchButton),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: strings.searchHistoryTitle,
+                  onPressed: _loading ? null : _showHistorySheet,
+                  icon: const Icon(Icons.history),
+                ),
+                const SizedBox(width: 4),
+                IconButton.filledTonal(
+                  tooltip: strings.filtersTitle,
+                  onPressed: _loading ? null : _showFiltersSheet,
+                  icon: Icon(_hasActiveFilters ? Icons.filter_alt : Icons.filter_alt_outlined),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            _buildHistory(context),
-            const SizedBox(height: 8),
-            _buildFilters(context),
             const SizedBox(height: 12),
             if (_loading) const LinearProgressIndicator(),
-            const SizedBox(height: 8),
+            if (_loading) const SizedBox(height: 8),
             Expanded(
               child: _buildBody(context),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildHistory(BuildContext context) {
-    final strings = context.strings;
-    if (_searchHistory.isEmpty) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          strings.noSearchHistory,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(strings.searchHistoryTitle, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 6),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: _searchHistory
-                .map(
-                  (query) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ActionChip(
-                      label: Text(query),
-                      onPressed: _loading ? null : () => _search(query),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    final strings = context.strings;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ExpansionTile(
-        title: Text(strings.filtersTitle),
-        leading: const Icon(Icons.filter_alt_outlined),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _authorFilterController,
-                  decoration: InputDecoration(
-                    labelText: strings.authorFilterLabel,
-                    border: const OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _genreFilterController,
-                  decoration: InputDecoration(
-                    labelText: strings.genreFilterLabel,
-                    border: const OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: CheckboxListTile(
-                  value: _onlyWithOffers,
-                  onChanged: (value) {
-                    setState(() {
-                      _onlyWithOffers = value ?? false;
-                    });
-                  },
-                  title: Text(strings.onlyWithOffersFilter),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _clearFilters,
-                icon: const Icon(Icons.clear),
-                label: Text(strings.clearFiltersButton),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -377,6 +417,7 @@ class _BooksScreenState extends State<BooksScreen> {
                       const SizedBox(height: 8),
                       IconButton(
                         onPressed: () => widget.onToggleSaved(item),
+                        tooltip: isSaved ? strings.removeFromFavoritesTooltip : strings.saveToFavoritesTooltip,
                         icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
                       ),
                     ],

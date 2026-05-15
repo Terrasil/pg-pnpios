@@ -24,8 +24,11 @@ public class AuthorController {
     }
 
     @GetMapping("/{authorId}")
-    public ResponseEntity<AuthorDetailsDTO> getAuthorDetails(@PathVariable String authorId) {
-        return ResponseEntity.ok(authorService.getAuthorDetails(authorId));
+    public ResponseEntity<AuthorDetailsDTO> getAuthorDetails(
+        @PathVariable String authorId,
+        @RequestParam(defaultValue = "PLN") String currency
+    ) {
+        return ResponseEntity.ok(authorService.getAuthorDetails(authorId, currency));
     }
 
     @GetMapping("/{authorId}/books")

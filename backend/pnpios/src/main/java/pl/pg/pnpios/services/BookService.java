@@ -5,6 +5,8 @@ import pl.pg.pnpios.dto.AuthorShortDTO;
 import pl.pg.pnpios.dto.BookDetailsDTO;
 import pl.pg.pnpios.dto.BookSearchItemDTO;
 import pl.pg.pnpios.dto.BookSearchResponseDTO;
+import pl.pg.pnpios.dto.CurrencyConvertRequestDTO;
+import pl.pg.pnpios.dto.CurrencyConvertResponseDTO;
 import pl.pg.pnpios.dto.MoneyDTO;
 import pl.pg.pnpios.dto.OfferDTO;
 import pl.pg.pnpios.dto.PriceRangeDTO;
@@ -34,6 +36,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,10 +47,13 @@ public class BookService {
     private static final Pattern PRICE_SUFFIX_PATTERN = Pattern.compile("([0-9]{1,4}(?:[\\.,][0-9]{2})?)\\s*(USD|EUR|GBP|PLN|zł)", Pattern.CASE_INSENSITIVE);
 
     private final ObjectMapper objectMapper;
+    private final CurrencyService currencyService;
     private final HttpClient httpClient;
+    private final Map<String, List<OfferDTO>> offersCache = new ConcurrentHashMap<>();
 
-    public BookService(ObjectMapper objectMapper) {
+    public BookService(ObjectMapper objectMapper, CurrencyService currencyService) {
         this.objectMapper = objectMapper;
+        this.currencyService = currencyService;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -105,50 +111,47 @@ public class BookService {
         BookSeed seed = loadBookSeed(bookId);
         String targetCurrency = normalizeCurrency(currency);
 
-        List<OfferDTO> offers = new ArrayList<>();
-        offers.addAll(scrapeAbeBooks(seed, targetCurrency));
-        offers.addAll(scrapeBiblio(seed, targetCurrency));
-        offers.addAll(scrapeBetterWorldBooks(seed, targetCurrency));
+        List<OfferDTO> offers = resolveConfirmedOffers(seed, targetCurrency).stream()
+            .filter(offer -> safeAmount(offer) != null)
+            .toList();
 
-        if (offers.isEmpty()) {
-            offers.addAll(buildFallbackMarketplaceOffers(seed, targetCurrency));
-        }
-
-        Map<String, OfferDTO> deduped = new LinkedHashMap<>();
-        for (OfferDTO offer : offers) {
-            String key = normalize(offer.source()) + "|" + normalize(offer.offerUrl()) + "|" + offer.originalPrice().amount();
-            deduped.putIfAbsent(key, offer);
-        }
-
-        List<OfferDTO> result = new ArrayList<>(deduped.values());
-        if (!isBlank(source)) {
-            result = result.stream()
-                .filter(offer -> offer.source() != null && offer.source().equalsIgnoreCase(source))
-                .toList();
-        }
-
-        Comparator<OfferDTO> comparator = switch (sort) {
-            case PRICE_DESC -> Comparator.comparing((OfferDTO offer) -> offer.convertedPrice().amount()).reversed();
-            case SOURCE_ASC -> Comparator.comparing(OfferDTO::source, String.CASE_INSENSITIVE_ORDER);
-            case PRICE_ASC -> Comparator.comparing(offer -> offer.convertedPrice().amount());
-        };
-
-        return result.stream().sorted(comparator).toList();
+        List<OfferDTO> result = filterOffersBySource(deduplicateOffers(offers), source);
+        return result.stream().sorted(offerComparator(sort)).toList();
     }
 
     BookSearchItemDTO createBookListItemForAuthorWorks(String workId, String title, String coverUrl, String genre, String authorName, String currency) {
-        List<String> authors = isBlank(authorName) ? List.of() : List.of(authorName);
-        return new BookSearchItemDTO(
-            normalizeWorkId(workId),
-            blankToDefault(title, normalizeWorkId(workId)),
-            null,
+        String normalizedWorkId = normalizeWorkId(workId);
+        BookSeed loadedSeed = loadBookSeed(normalizedWorkId);
+        List<String> authors = loadedSeed.authors().isEmpty()
+            ? (isBlank(authorName) ? List.of() : List.of(authorName))
+            : loadedSeed.authors();
+        BookSeed summarySeed = new BookSeed(
+            normalizedWorkId,
+            firstNonBlank(loadedSeed.title(), title, normalizedWorkId),
+            loadedSeed.subtitle(),
+            loadedSeed.description(),
             authors,
-            coverUrl,
-            null,
-            genre,
-            null,
-            3,
-            buildEstimatedPriceRange(title, authors, null, currency)
+            firstNonBlank(loadedSeed.coverUrl(), coverUrl),
+            loadedSeed.publisher(),
+            loadedSeed.publishedYear(),
+            loadedSeed.language(),
+            loadedSeed.pageCount(),
+            loadedSeed.genres().isEmpty() && !isBlank(genre) ? List.of(genre) : loadedSeed.genres(),
+            loadedSeed.isbn10(),
+            loadedSeed.isbn13()
+        );
+        OfferSummary summary = buildOfferSummary(summarySeed, currency);
+        return new BookSearchItemDTO(
+            summarySeed.workId(),
+            blankToDefault(summarySeed.title(), normalizedWorkId),
+            summarySeed.subtitle(),
+            authors,
+            summarySeed.coverUrl(),
+            summarySeed.language(),
+            firstNonBlank(first(summarySeed.genres()), genre),
+            summarySeed.isbn13(),
+            summary.count(),
+            summary.priceRange()
         );
     }
 
@@ -159,9 +162,60 @@ public class BookService {
         String coverUrl = coverUrl(integerValue(doc.get("cover_i"), -1));
         String language = first(stringList(doc.get("language")));
         String genre = first(stringList(doc.get("subject")));
-        String isbn13 = pickIsbn13(stringList(doc.get("isbn")));
-        PriceRangeDTO priceRange = buildEstimatedPriceRange(title, authors, isbn13, currency);
-        return new BookSearchItemDTO(workId, title, null, authors, coverUrl, language, genre, isbn13, 3, priceRange);
+        List<String> isbnValues = stringList(doc.get("isbn"));
+        String isbn13 = pickIsbn13(isbnValues);
+        String isbn10 = pickIsbn10(isbnValues);
+        Integer publishedYear = integerValueOrNull(doc.get("first_publish_year"));
+        BookSeed searchSeed = new BookSeed(
+            workId,
+            title,
+            null,
+            null,
+            authors,
+            coverUrl,
+            first(stringList(doc.get("publisher"))),
+            publishedYear,
+            language,
+            null,
+            genre == null ? List.of() : List.of(genre),
+            isbn10,
+            isbn13
+        );
+        BookSeed summarySeed = mergeSearchSeedWithLoadedSeed(searchSeed, loadBookSeed(workId));
+        OfferSummary summary = buildOfferSummary(summarySeed, currency);
+        return new BookSearchItemDTO(
+            workId,
+            summarySeed.title(),
+            summarySeed.subtitle(),
+            summarySeed.authors(),
+            summarySeed.coverUrl(),
+            summarySeed.language(),
+            firstNonBlank(first(summarySeed.genres()), genre),
+            summarySeed.isbn13(),
+            summary.count(),
+            summary.priceRange()
+        );
+    }
+
+    private BookSeed mergeSearchSeedWithLoadedSeed(BookSeed searchSeed, BookSeed loadedSeed) {
+        if (loadedSeed == null) {
+            return searchSeed;
+        }
+        return new BookSeed(
+            searchSeed.workId(),
+            firstNonBlank(loadedSeed.title(), searchSeed.title(), searchSeed.workId()),
+            firstNonBlank(loadedSeed.subtitle(), searchSeed.subtitle()),
+            firstNonBlank(loadedSeed.description(), searchSeed.description()),
+            loadedSeed.authors().isEmpty() ? searchSeed.authors() : loadedSeed.authors(),
+            firstNonBlank(loadedSeed.coverUrl(), searchSeed.coverUrl()),
+            firstNonBlank(loadedSeed.publisher(), searchSeed.publisher()),
+            loadedSeed.publishedYear() == null ? searchSeed.publishedYear() : loadedSeed.publishedYear(),
+            firstNonBlank(loadedSeed.language(), searchSeed.language()),
+            loadedSeed.pageCount() == null ? searchSeed.pageCount() : loadedSeed.pageCount(),
+            loadedSeed.genres().isEmpty() ? searchSeed.genres() : loadedSeed.genres(),
+            firstNonBlank(loadedSeed.isbn10(), searchSeed.isbn10()),
+            firstNonBlank(loadedSeed.isbn13(), searchSeed.isbn13())
+        );
     }
 
     private BookSeed loadBookSeed(String rawBookId) {
@@ -281,116 +335,122 @@ public class BookService {
         String searchUrl = !isBlank(seed.isbn13())
             ? "https://www.abebooks.com/servlet/SearchResults?isbn=" + encode(seed.isbn13()) + "&sortby=17"
             : "https://www.abebooks.com/servlet/SearchResults?kn=" + encode(searchPhrase(seed)) + "&sortby=17";
-        return scrapePriceOffers("AbeBooks", "Marketplace Search", searchUrl, currency, "USD");
+        return scrapePriceOffers("AbeBooks", "Marketplace Search", searchUrl, currency, "USD", seed);
     }
 
     private List<OfferDTO> scrapeBiblio(BookSeed seed, String currency) {
         String searchUrl = !isBlank(seed.isbn13())
             ? "https://www.biblio.com/search.php?stage=1&keyisbn=" + encode(seed.isbn13())
             : "https://www.biblio.com/search.php?stage=1&keytitle=" + encode(seed.title()) + "&keyauthor=" + encode(first(seed.authors()));
-        return scrapePriceOffers("Biblio", "Marketplace Search", searchUrl, currency, "USD");
+        return scrapePriceOffers("Biblio", "Marketplace Search", searchUrl, currency, "USD", seed);
     }
 
     private List<OfferDTO> scrapeBetterWorldBooks(BookSeed seed, String currency) {
         String query = !isBlank(seed.isbn13()) ? seed.isbn13() : searchPhrase(seed);
         String searchUrl = "https://www.betterworldbooks.com/search/results?q=" + encode(query);
-        return scrapePriceOffers("Better World Books", "Marketplace Search", searchUrl, currency, "USD");
+        return scrapePriceOffers("Better World Books", "Marketplace Search", searchUrl, currency, "USD", seed);
     }
 
-    private List<OfferDTO> buildFallbackMarketplaceOffers(BookSeed seed, String targetCurrency) {
+    private List<OfferDTO> buildMarketplaceSearchLinks(BookSeed seed) {
         String query = searchPhrase(seed);
         if (isBlank(query)) {
             query = firstNonBlank(seed.isbn13(), seed.isbn10(), seed.title(), seed.workId());
         }
 
-        BigDecimal baseUsd = estimatedUsdPrice(seed.title(), seed.authors(), seed.isbn13(), seed.publishedYear(), seed.pageCount());
         List<OfferDTO> offers = new ArrayList<>();
-        addFallbackOffer(offers, "abebooks-fallback", "AbeBooks", "Marketplace Search Fallback",
+        addMarketplaceSearchLink(offers, "abebooks-search", "AbeBooks",
             !isBlank(seed.isbn13())
                 ? "https://www.abebooks.com/servlet/SearchResults?isbn=" + encode(seed.isbn13()) + "&sortby=17"
-                : "https://www.abebooks.com/servlet/SearchResults?kn=" + encode(query) + "&sortby=17",
-            baseUsd, targetCurrency);
-        addFallbackOffer(offers, "biblio-fallback", "Biblio", "Marketplace Search Fallback",
+                : "https://www.abebooks.com/servlet/SearchResults?kn=" + encode(query) + "&sortby=17");
+        addMarketplaceSearchLink(offers, "biblio-search", "Biblio",
             !isBlank(seed.isbn13())
                 ? "https://www.biblio.com/search.php?stage=1&keyisbn=" + encode(seed.isbn13())
-                : "https://www.biblio.com/search.php?stage=1&keytitle=" + encode(seed.title()) + "&keyauthor=" + encode(first(seed.authors())),
-            baseUsd.multiply(BigDecimal.valueOf(1.08)), targetCurrency);
-        addFallbackOffer(offers, "betterworldbooks-fallback", "Better World Books", "Marketplace Search Fallback",
-            "https://www.betterworldbooks.com/search/results?q=" + encode(query),
-            baseUsd.multiply(BigDecimal.valueOf(0.93)), targetCurrency);
+                : "https://www.biblio.com/search.php?stage=1&keytitle=" + encode(seed.title()) + "&keyauthor=" + encode(first(seed.authors())));
+        addMarketplaceSearchLink(offers, "betterworldbooks-search", "Better World Books",
+            "https://www.betterworldbooks.com/search/results?q=" + encode(!isBlank(seed.isbn13()) ? seed.isbn13() : query));
         return offers;
     }
 
-    private void addFallbackOffer(
+    private void addMarketplaceSearchLink(
         List<OfferDTO> offers,
         String id,
         String source,
-        String sourceType,
-        String url,
-        BigDecimal usdAmount,
-        String targetCurrency
+        String url
     ) {
-        BigDecimal normalizedUsd = usdAmount.setScale(2, RoundingMode.HALF_UP);
-        MoneyDTO originalPrice = new MoneyDTO(normalizedUsd, "USD");
-        MoneyDTO convertedPrice = new MoneyDTO(convert(normalizedUsd, "USD", targetCurrency), targetCurrency);
         offers.add(new OfferDTO(
             id,
             source,
-            sourceType,
+            "Marketplace Search Link",
             url,
             AvailabilityStatus.UNKNOWN,
-            originalPrice,
-            convertedPrice,
-            calculateExchangeRate("USD", targetCurrency),
+            null,
+            null,
+            null,
             Instant.now()
         ));
     }
 
-    private PriceRangeDTO buildEstimatedPriceRange(String title, List<String> authors, String isbn13, String targetCurrency) {
-        String currency = normalizeCurrency(targetCurrency);
-        BigDecimal baseUsd = estimatedUsdPrice(title, authors, isbn13, null, null);
-        BigDecimal min = convert(baseUsd.multiply(BigDecimal.valueOf(0.93)), "USD", currency);
-        BigDecimal max = convert(baseUsd.multiply(BigDecimal.valueOf(1.08)), "USD", currency);
-        return new PriceRangeDTO(min, max, currency);
+    private List<OfferDTO> resolveConfirmedOffers(BookSeed seed, String targetCurrency) {
+        String cacheKey = offerCacheKey(seed, targetCurrency);
+        return offersCache.computeIfAbsent(cacheKey, ignored -> {
+            List<OfferDTO> offers = new ArrayList<>();
+            offers.addAll(scrapeAbeBooks(seed, targetCurrency));
+            offers.addAll(scrapeBiblio(seed, targetCurrency));
+            offers.addAll(scrapeBetterWorldBooks(seed, targetCurrency));
+            return deduplicateOffers(offers).stream()
+                .filter(offer -> safeAmount(offer) != null)
+                .toList();
+        });
     }
 
-    private BigDecimal estimatedUsdPrice(String title, List<String> authors, String isbn13, Integer publishedYear, Integer pageCount) {
-        String key = firstNonBlank(isbn13, title, first(authors), "book");
-        int hash = normalize(key).hashCode() & 0x7fffffff;
-        BigDecimal price = BigDecimal.valueOf(7 + (hash % 2600) / 100.0);
+    private OfferSummary buildOfferSummary(BookSeed seed, String currency) {
+        String targetCurrency = normalizeCurrency(currency);
+        List<OfferDTO> offers = resolveConfirmedOffers(seed, targetCurrency).stream()
+            .filter(offer -> safeAmount(offer) != null)
+            .toList();
 
-        if (pageCount != null && pageCount > 600) {
-            price = price.add(BigDecimal.valueOf(6));
-        } else if (pageCount != null && pageCount > 350) {
-            price = price.add(BigDecimal.valueOf(3));
+        if (offers.isEmpty()) {
+            return new OfferSummary(0, null);
         }
 
-        if (publishedYear != null && publishedYear >= 2018) {
-            price = price.add(BigDecimal.valueOf(4));
-        }
-
-        return price.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal min = offers.stream().map(this::safeAmount).filter(Objects::nonNull).min(BigDecimal::compareTo).orElse(null);
+        BigDecimal max = offers.stream().map(this::safeAmount).filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null);
+        PriceRangeDTO range = min == null || max == null ? null : new PriceRangeDTO(min, max, targetCurrency);
+        return new OfferSummary(offers.size(), range);
     }
 
-    private List<OfferDTO> scrapePriceOffers(String source, String sourceType, String searchUrl, String targetCurrency, String defaultCurrency) {
+    private List<OfferDTO> scrapePriceOffers(String source, String sourceType, String searchUrl, String targetCurrency, String defaultCurrency, BookSeed seed) {
         String html = getText(searchUrl);
-        if (isBlank(html)) {
+        if (isBlank(html) || containsNoExactMatchMessage(html)) {
             return List.of();
         }
 
-        List<PriceSample> samples = extractPriceSamples(html, defaultCurrency);
         List<OfferDTO> offers = new ArrayList<>();
+        List<String> blocks = extractCandidateListingBlocks(html, seed);
+        Set<String> seen = new LinkedHashSet<>();
         int index = 1;
-        for (PriceSample sample : samples) {
+        for (String block : blocks) {
+            if (!isConcreteListingBlock(block, seed)) {
+                continue;
+            }
+            PriceSample sample = extractListingPrice(block, defaultCurrency);
+            if (sample == null) {
+                continue;
+            }
             BigDecimal original = sample.amount().setScale(2, RoundingMode.HALF_UP);
             String originalCurrency = normalizeCurrency(sample.currency());
+            String offerUrl = extractOfferUrl(block, searchUrl);
+            String dedupKey = normalize(source) + '|' + normalize(offerUrl) + '|' + originalCurrency + '|' + original;
+            if (!seen.add(dedupKey)) {
+                continue;
+            }
             MoneyDTO originalPrice = new MoneyDTO(original, originalCurrency);
             MoneyDTO convertedPrice = new MoneyDTO(convert(original, originalCurrency, targetCurrency), targetCurrency);
             offers.add(new OfferDTO(
                 normalize(source) + "-" + index,
                 source,
                 sourceType,
-                searchUrl,
+                offerUrl,
                 AvailabilityStatus.AVAILABLE,
                 originalPrice,
                 convertedPrice,
@@ -398,34 +458,247 @@ public class BookService {
                 Instant.now()
             ));
             index++;
+            if (offers.size() >= 10) {
+                break;
+            }
         }
         return offers;
     }
 
-    private List<PriceSample> extractPriceSamples(String html, String defaultCurrency) {
-        Set<String> seen = new LinkedHashSet<>();
-        List<PriceSample> result = new ArrayList<>();
-        collectPriceSamples(html, PRICE_PREFIX_PATTERN, true, defaultCurrency, seen, result);
-        collectPriceSamples(html, PRICE_SUFFIX_PATTERN, false, defaultCurrency, seen, result);
-        return result.stream().limit(5).toList();
+    private List<String> extractCandidateListingBlocks(String html, BookSeed seed) {
+        List<String> blocks = new ArrayList<>();
+        Set<String> ranges = new LinkedHashSet<>();
+        String lowerHtml = html.toLowerCase(Locale.ROOT);
+        List<String> anchors = listingAnchors(seed);
+
+        for (String anchor : anchors) {
+            String normalizedAnchor = anchor.toLowerCase(Locale.ROOT);
+            int fromIndex = 0;
+            while (fromIndex >= 0 && fromIndex < lowerHtml.length()) {
+                int index = lowerHtml.indexOf(normalizedAnchor, fromIndex);
+                if (index < 0) {
+                    break;
+                }
+                int start = findListingStart(html, index);
+                int end = findListingEnd(html, index);
+                if (end <= start) {
+                    start = Math.max(0, index - 2500);
+                    end = Math.min(html.length(), index + 3500);
+                }
+                String key = start + ":" + end;
+                if (ranges.add(key)) {
+                    blocks.add(html.substring(start, end));
+                }
+                fromIndex = index + normalizedAnchor.length();
+            }
+        }
+        return blocks;
     }
 
-    private void collectPriceSamples(String html, Pattern pattern, boolean prefixCurrency, String defaultCurrency, Set<String> seen, List<PriceSample> result) {
-        Matcher matcher = pattern.matcher(html);
-        while (matcher.find() && result.size() < 5) {
+    private List<String> listingAnchors(BookSeed seed) {
+        List<String> anchors = new ArrayList<>();
+        String isbn13 = digitsOnly(seed.isbn13());
+        String isbn10 = digitsOnly(seed.isbn10());
+        if (!isBlank(isbn13)) {
+            anchors.add(isbn13);
+        }
+        if (!isBlank(isbn10)) {
+            anchors.add(isbn10);
+        }
+        if (!isBlank(seed.title()) && seed.title().trim().length() >= 6) {
+            anchors.add(seed.title().trim());
+        }
+        return anchors;
+    }
+
+    private int findListingStart(String html, int index) {
+        return Math.max(0, index - 900);
+    }
+
+    private int findListingEnd(String html, int index) {
+        return Math.min(html.length(), index + 4200);
+    }
+
+    private boolean isConcreteListingBlock(String block, BookSeed seed) {
+        String normalizedBlock = normalizeForMatching(stripTags(block));
+        if (isBlank(normalizedBlock)) {
+            return false;
+        }
+
+        String isbn13 = digitsOnly(seed.isbn13());
+        if (!isBlank(isbn13) && normalizedBlock.contains(isbn13)) {
+            return true;
+        }
+
+        String isbn10 = digitsOnly(seed.isbn10());
+        if (!isBlank(isbn10) && normalizedBlock.contains(isbn10)) {
+            return true;
+        }
+
+        String normalizedTitle = normalizeForMatching(seed.title());
+        String normalizedAuthor = normalizeForMatching(first(seed.authors()));
+        if (normalizedTitle.length() < 8 || !normalizedBlock.contains(normalizedTitle)) {
+            return false;
+        }
+        return !isBlank(normalizedAuthor) && normalizedBlock.contains(normalizedAuthor);
+    }
+
+    private PriceSample extractListingPrice(String block, String defaultCurrency) {
+        List<PriceSampleWithPosition> samples = new ArrayList<>();
+        collectListingPriceSamples(block, PRICE_PREFIX_PATTERN, true, defaultCurrency, samples);
+        collectListingPriceSamples(block, PRICE_SUFFIX_PATTERN, false, defaultCurrency, samples);
+        return samples.stream()
+            .sorted(Comparator.comparing(PriceSampleWithPosition::position))
+            .map(PriceSampleWithPosition::sample)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private void collectListingPriceSamples(String block, Pattern pattern, boolean prefixCurrency, String defaultCurrency, List<PriceSampleWithPosition> samples) {
+        Matcher matcher = pattern.matcher(block);
+        while (matcher.find()) {
+            if (!isListingPriceContext(block, matcher.start(), matcher.end())) {
+                continue;
+            }
             String currency = prefixCurrency ? matcher.group(1) : matcher.group(2);
             String amountText = prefixCurrency ? matcher.group(2) : matcher.group(1);
             BigDecimal amount = parseAmount(amountText);
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0 || amount.compareTo(BigDecimal.valueOf(5000)) > 0) {
                 continue;
             }
-            String normalizedCurrency = normalizeCurrencySymbol(currency, defaultCurrency);
-            String key = normalizedCurrency + "|" + amount;
-            if (!seen.add(key)) {
+            samples.add(new PriceSampleWithPosition(new PriceSample(amount, normalizeCurrencySymbol(currency, defaultCurrency)), matcher.start()));
+        }
+    }
+
+    private boolean isListingPriceContext(String block, int start, int end) {
+        String before = stripTags(block.substring(Math.max(0, start - 120), start)).toLowerCase(Locale.ROOT);
+        String after = stripTags(block.substring(end, Math.min(block.length(), end + 120))).toLowerCase(Locale.ROOT);
+        String context = before + " " + after;
+
+        if (context.contains("shipping")
+            || context.contains("ship ")
+            || context.contains("ships ")
+            || context.contains("postage")
+            || context.contains("delivery")
+            || context.contains("tax")
+            || context.contains("vat")
+            || context.contains("wysył")) {
+            return false;
+        }
+
+        return before.contains("price")
+            || before.contains("cena")
+            || before.contains("our price")
+            || before.contains("sale")
+            || !containsPriceLabelNearby(block, end);
+    }
+
+    private boolean containsPriceLabelNearby(String block, int end) {
+        String after = stripTags(block.substring(end, Math.min(block.length(), end + 80))).toLowerCase(Locale.ROOT);
+        return after.contains("shipping") || after.contains("delivery") || after.contains("postage");
+    }
+
+    private String extractOfferUrl(String block, String fallbackUrl) {
+        Pattern hrefPattern = Pattern.compile("href=\\\"([^\\\"]+)\\\"|href='([^']+)'", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = hrefPattern.matcher(block);
+        while (matcher.find()) {
+            String href = firstNonBlank(matcher.group(1), matcher.group(2));
+            if (isBlank(href) || href.startsWith("#") || href.toLowerCase(Locale.ROOT).startsWith("javascript:")) {
                 continue;
             }
-            result.add(new PriceSample(amount, normalizedCurrency));
+            if (href.contains("/servlet/")
+                || href.contains("/book/")
+                || href.contains("/books/")
+                || href.contains("/product/")) {
+                return absoluteUrl(fallbackUrl, href);
+            }
         }
+        return fallbackUrl;
+    }
+
+    private String absoluteUrl(String baseUrl, String href) {
+        try {
+            URI base = URI.create(baseUrl);
+            return base.resolve(href).toString();
+        } catch (Exception ex) {
+            return href;
+        }
+    }
+
+    private String stripTags(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+            .replaceAll("(?is)<script.*?</script>", " ")
+            .replaceAll("(?is)<style.*?</style>", " ")
+            .replaceAll("<[^>]+>", " ")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&#36;", "$")
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
+    private boolean containsNoExactMatchMessage(String html) {
+        String plainText = stripTags(html).toLowerCase(Locale.ROOT);
+        return plainText.contains("unable to find exact matches")
+            || plainText.contains("closest match to your search")
+            || plainText.contains("no results")
+            || plainText.contains("no exact matches")
+            || plainText.contains("did not match any products")
+            || plainText.contains("0 results")
+            || plainText.contains("we couldn't find any matches")
+            || plainText.contains("we could not find any matches");
+    }
+
+    private List<OfferDTO> deduplicateOffers(List<OfferDTO> offers) {
+        Map<String, OfferDTO> deduped = new LinkedHashMap<>();
+        for (OfferDTO offer : offers) {
+            String key = normalize(offer.source()) + "|" + normalize(offer.offerUrl()) + "|" + safeAmount(offer);
+            deduped.putIfAbsent(key, offer);
+        }
+        return new ArrayList<>(deduped.values());
+    }
+
+    private List<OfferDTO> filterOffersBySource(List<OfferDTO> offers, String source) {
+        if (isBlank(source)) {
+            return offers;
+        }
+        return offers.stream()
+            .filter(offer -> offer.source() != null && offer.source().equalsIgnoreCase(source))
+            .toList();
+    }
+
+    private Comparator<OfferDTO> offerComparator(OfferSortType sort) {
+        Comparator<OfferDTO> priceAscComparator = Comparator.comparing(
+            this::safeAmount,
+            Comparator.nullsLast(BigDecimal::compareTo)
+        );
+        Comparator<OfferDTO> priceDescComparator = Comparator.comparing(
+            this::safeAmount,
+            Comparator.nullsLast(Comparator.<BigDecimal>reverseOrder())
+        );
+        return switch (sort) {
+            case PRICE_DESC -> priceDescComparator;
+            case SOURCE_ASC -> Comparator.comparing(OfferDTO::source, String.CASE_INSENSITIVE_ORDER);
+            case PRICE_ASC -> priceAscComparator;
+        };
+    }
+
+    private String offerCacheKey(BookSeed seed, String targetCurrency) {
+        return normalizeCurrency(targetCurrency) + '|'
+            + normalize(firstNonBlank(seed.isbn13(), seed.isbn10(), seed.workId(), seed.title())) + '|'
+            + normalize(seed.title()) + '|'
+            + normalize(first(seed.authors()));
+    }
+
+    private BigDecimal safeAmount(OfferDTO offer) {
+        if (offer == null || offer.convertedPrice() == null || offer.convertedPrice().amount() == null) {
+            return null;
+        }
+        BigDecimal amount = offer.convertedPrice().amount();
+        return amount.compareTo(BigDecimal.ZERO) <= 0 ? null : amount;
     }
 
     private String searchPhrase(BookSeed seed) {
@@ -513,24 +786,19 @@ public class BookService {
     }
 
     private BigDecimal calculateExchangeRate(String from, String to) {
-        return convert(BigDecimal.ONE, from, to);
+        return convertResponse(BigDecimal.ONE, from, to).rate();
     }
 
     private BigDecimal convert(BigDecimal amount, String from, String to) {
-        String normalizedFrom = normalizeCurrency(from);
-        String normalizedTo = normalizeCurrency(to);
-        BigDecimal amountInPln = amount.multiply(rateToPln(normalizedFrom));
-        return amountInPln.divide(rateToPln(normalizedTo), 2, RoundingMode.HALF_UP);
+        return convertResponse(amount, from, to).convertedAmount();
     }
 
-    private BigDecimal rateToPln(String currency) {
-        return switch (normalizeCurrency(currency)) {
-            case "USD" -> BigDecimal.valueOf(4.02);
-            case "EUR" -> BigDecimal.valueOf(4.32);
-            case "GBP" -> BigDecimal.valueOf(5.05);
-            case "PLN" -> BigDecimal.ONE;
-            default -> BigDecimal.ONE;
-        };
+    private CurrencyConvertResponseDTO convertResponse(BigDecimal amount, String from, String to) {
+        return currencyService.convert(new CurrencyConvertRequestDTO(
+            amount == null ? BigDecimal.ZERO : amount,
+            normalizeCurrency(from),
+            normalizeCurrency(to)
+        ));
     }
 
     private BigDecimal parseAmount(String value) {
@@ -556,6 +824,21 @@ public class BookService {
             case "ZŁ", "PLN" -> "PLN";
             default -> normalizeCurrency(fallback);
         };
+    }
+
+
+    private String normalizeForMatching(String value) {
+        if (isBlank(value)) {
+            return "";
+        }
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
+    }
+
+    private String digitsOnly(String value) {
+        if (isBlank(value)) {
+            return "";
+        }
+        return value.replaceAll("[^0-9]", "");
     }
 
     private String normalizeCurrency(String currency) {
@@ -639,6 +922,15 @@ public class BookService {
         return first(values);
     }
 
+    private String pickIsbn10(List<String> values) {
+        for (String value : values) {
+            if (value != null && value.matches("[0-9]{9}[0-9Xx]")) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private String pickIsbn13(List<String> values) {
         for (String value : values) {
             if (value != null && value.matches("97[89][0-9]{10}")) {
@@ -716,5 +1008,10 @@ public class BookService {
         String isbn13
     ) {}
 
+    private record OfferSummary(int count, PriceRangeDTO priceRange) {}
+
     private record PriceSample(BigDecimal amount, String currency) {}
+
+    private record PriceSampleWithPosition(PriceSample sample, int position) {}
 }
+

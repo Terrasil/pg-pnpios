@@ -3,10 +3,13 @@ package pl.pg.pnpios.services.external;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import feign.FeignException;
+import pl.pg.pnpios.dto.CurrencyConvertRequestDTO;
+import pl.pg.pnpios.dto.CurrencyConvertResponseDTO;
 import pl.pg.pnpios.dto.MoneyDTO;
 import pl.pg.pnpios.dto.OfferDTO;
 import pl.pg.pnpios.enums.AvailabilityStatus;
 import pl.pg.pnpios.external.GoogleBooksClient;
+import pl.pg.pnpios.services.CurrencyService;
 import pl.pg.pnpios.services.support.BookSeed;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -26,6 +29,7 @@ import java.util.Set;
 public class GoogleBooksService {
     private final GoogleBooksClient client;
     private final ObjectMapper objectMapper;
+    private final CurrencyService currencyService;
     private final boolean enabled;
     private volatile boolean quotaExceededForRun;
     private final String apiKey;
@@ -35,6 +39,7 @@ public class GoogleBooksService {
     public GoogleBooksService(
         GoogleBooksClient client,
         ObjectMapper objectMapper,
+        CurrencyService currencyService,
         @Value("${google.books.api.enabled:false}") boolean enabled,
         @Value("${google.books.api.key:}") String apiKey,
         @Value("${google.books.country:PL}") String defaultCountry,
@@ -42,6 +47,7 @@ public class GoogleBooksService {
     ) {
         this.client = client;
         this.objectMapper = objectMapper;
+        this.currencyService = currencyService;
         this.enabled = enabled;
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.defaultCountry = normalizeCountry(defaultCountry, "PL");
@@ -344,24 +350,19 @@ public class GoogleBooksService {
     }
 
     private BigDecimal calculateExchangeRate(String from, String to) {
-        return convert(BigDecimal.ONE, from, to);
+        return convertResponse(BigDecimal.ONE, from, to).rate();
     }
 
     private BigDecimal convert(BigDecimal amount, String from, String to) {
-        String normalizedFrom = normalizeCurrency(from);
-        String normalizedTo = normalizeCurrency(to);
-        BigDecimal amountInPln = amount.multiply(rateToPln(normalizedFrom));
-        return amountInPln.divide(rateToPln(normalizedTo), 2, RoundingMode.HALF_UP);
+        return convertResponse(amount, from, to).convertedAmount();
     }
 
-    private BigDecimal rateToPln(String currency) {
-        return switch (normalizeCurrency(currency)) {
-            case "USD" -> BigDecimal.valueOf(4.02);
-            case "EUR" -> BigDecimal.valueOf(4.32);
-            case "GBP" -> BigDecimal.valueOf(5.05);
-            case "PLN" -> BigDecimal.ONE;
-            default -> BigDecimal.ONE;
-        };
+    private CurrencyConvertResponseDTO convertResponse(BigDecimal amount, String from, String to) {
+        return currencyService.convert(new CurrencyConvertRequestDTO(
+            amount == null ? BigDecimal.ZERO : amount,
+            normalizeCurrency(from),
+            normalizeCurrency(to)
+        ));
     }
 
     private String normalizeCurrency(String currency) {

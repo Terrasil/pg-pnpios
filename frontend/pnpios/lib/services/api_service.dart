@@ -64,7 +64,7 @@ class ApiService {
   Future<Map<String, dynamic>> _getJson(String path, [Map<String, String>? query]) async {
     final response = await _client
         .get(_buildUri(path, query), headers: _jsonHeaders)
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(_parseError(response));
     }
@@ -88,7 +88,7 @@ class ApiService {
   Future<List<dynamic>> _getJsonList(String path, [Map<String, String>? query]) async {
     final response = await _client
         .get(_buildUri(path, query), headers: _jsonHeaders)
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(_parseError(response));
     }
@@ -159,8 +159,8 @@ class ApiService {
     return AuthorSearchResponse.fromJson(json);
   }
 
-  Future<AuthorDetails> getAuthorDetails({required String authorId}) async {
-    final json = await _getJson('/api/v1/authors/$authorId');
+  Future<AuthorDetails> getAuthorDetails({required String authorId, required String currency}) async {
+    final json = await _getJson('/api/v1/authors/$authorId', {'currency': currency});
     return AuthorDetails.fromJson(json);
   }
 
@@ -199,7 +199,7 @@ class ApiService {
           headers: _jsonHeadersWithBody,
           body: jsonEncode(CurrencyConvertRequest(amount: amount, from: from, to: to).toJson()),
         )
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(_parseError(response));
     }
